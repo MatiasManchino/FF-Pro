@@ -1,0 +1,53 @@
+/* HUD */
+.hud {
+    height: 60px;
+    flex-direction: row;
+    background-color: rgba(10, 15, 30, 0.95);
+    align-items: center;
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+/* TABS */
+.tab-button {
+    margin-top: 5px;
+    padding: 8px;
+    background-color: rgba(25, 40, 60, 0.8);
+}
+
+.tab-button:hover {
+    background-color: rgba(50, 80, 120, 0.9);
+}
+
+.tab-button-active {
+    background-color: rgb(40, 80, 130);
+    border-left-width: 3px;
+    border-left-color: rgb(100, 180, 255);
+}
+
+/* PANEL CONTAINER */
+.panel-container {
+    flex-grow: 1;
+    background-color: rgba(8, 12, 20, 0.85);
+    padding: 15px;
+}
+
+.panel-title {
+    font-size: 22px;
+    color: rgb(100, 180, 255);
+    margin-bottom: 15px;
+}
+
+/* NEWS TICKER */
+.news-ticker {
+    height: 32px;
+    background-color: rgba(0, 0, 0, 0.7);
+    flex-direction: row;
+    align-items: center;
+    padding-left: 10px;
+}
+
+.news-label {
+    font-size: 12px;
+    color: rgb(200, 210, 230);
+}
