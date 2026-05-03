@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using FreightForwarder.Models;
 using FreightForwarder.Utils;
+using Constants = FreightForwarder.Models.Constants;
 
 namespace FreightForwarder.Managers
 {
