@@ -5,6 +5,7 @@ using UnityEngine;
 using FreightForwarder.Managers;
 using FreightForwarder.Models;
 using FreightForwarder.Utils;
+using Constants = FreightForwarder.Models.Constants;
 
 namespace FreightForwarder.Map
 {

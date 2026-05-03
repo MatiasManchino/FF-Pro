@@ -275,4 +275,4 @@ namespace FreightForwarder.Models
             return $"[WorldCity] {DisplayName}, {Country} ({(IsUnlocked ? "🔓" : "🔒")})";
         }
     }
-}
+
