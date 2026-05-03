@@ -243,5 +243,29 @@ namespace FreightForwarder.Managers
         {
             return $"${amount:N0}";
         }
+
+        // =========================================================================
+        // RESTAURACIÓN DE ESTADO (PARA SAVE/LOAD)
+        // =========================================================================
+        
+        public void RestoreState(int money, int reputation, int level, int currentXP,
+                                 int totalCompleted, int totalFailed, int totalRevenue, 
+                                 int totalCosts, int totalAbandoned)
+        {
+            Money = money;
+            Reputation = reputation;
+            Level = level;
+            CurrentXP = currentXP;
+            TotalCargosCompleted = totalCompleted;
+            TotalCargosFailed = totalFailed;
+            TotalRevenue = totalRevenue;
+            TotalCosts = totalCosts;
+            TotalCargosAbandoned = totalAbandoned;
+            
+            OnMoneyChanged?.Invoke(Money);
+            OnReputationChanged?.Invoke(Reputation);
+            
+            Debug.Log($"[EconomyManager] Estado restaurado. Dinero: ${Money}, Reputación: {Reputation}");
+        }
     }
 }

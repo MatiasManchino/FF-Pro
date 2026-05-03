@@ -63,6 +63,31 @@ namespace FreightForwarder.Managers
         public event Action<Cargo> OnCargoCompleted;
         public event Action<Cargo> OnCargoFailed;
         public event Action<Cargo> OnCargoExpired;
+
+        // =========================================================================
+        // MÉTODOS PÚBLICOS PARA SAVE/LOAD
+        // =========================================================================
+        
+        public List<string> GetUnlockedCityIds() => new List<string>(_unlockedCityIds);
+        
+        public void RestoreState(List<Cargo> market, List<Cargo> active, 
+                                List<Cargo> completed, List<Cargo> failed,
+                                List<string> unlockedCities, List<Quote> pendingQuotes)
+        {
+            MarketCargos = market ?? new List<Cargo>();
+            ActiveCargos = active ?? new List<Cargo>();
+            CompletedCargos = completed ?? new List<Cargo>();
+            FailedCargos = failed ?? new List<Cargo>();
+            _unlockedCityIds = unlockedCities ?? new List<string>();
+            
+            // Restaurar cotizaciones pendientes
+            if (pendingQuotes != null && ClientManager.Instance != null)
+            {
+                ClientManager.Instance.RestorePendingQuotes(pendingQuotes);
+            }
+            
+            Debug.Log($"[CargoManager] Estado restaurado. Mercado: {MarketCargos.Count}, Activas: {ActiveCargos.Count}");
+        }
         
         // =========================================================================
         // INICIALIZACIÓN
