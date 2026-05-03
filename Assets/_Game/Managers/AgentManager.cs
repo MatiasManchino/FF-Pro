@@ -15,7 +15,7 @@ namespace FreightForwarder.Managers
         private Dictionary<string, List<string>> _agentActiveCargos;
 
         // Eventos
-        public event System.Action<Agent, string, float> OnPriceSurge;
+        public event System.Action<Agent, Cargo, float> OnPriceSurge;
         public event System.Action<Agent, string> OnCargoAbandoned;
         public event System.Action<Agent, int> OnAgentDisappeared;
         public event System.Action<Agent, string, int> OnAgentScam;
