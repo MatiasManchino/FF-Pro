@@ -275,26 +275,7 @@ namespace FreightForwarder.Models
             return $"[WorldCity] {DisplayName}, {Country} ({(IsUnlocked ? "🔓" : "🔒")})";
         }
     }
-    
-    /// <summary>
-    /// Clase estática con datos predefinidos de todas las ciudades.
-    /// Esto reemplaza la necesidad de un ScriptableObject por ahora.
-    /// </summary>
-    public static class CityDatabase
-    {
-        private static Dictionary<string, WorldCity> _cities;
-        
-        /// <summary>
-        /// Diccionario de todas las ciudades del juego.
-        /// </summary>
-        public static Dictionary<string, WorldCity> AllCities
-        {
-            get
-            {
-                if (_cities == null)
-                    LoadCities();
-                return _cities;
-            }
+}
         }
         
         /// <summary>

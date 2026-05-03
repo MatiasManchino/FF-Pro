@@ -1,12 +1,12 @@
 using UnityEngine;
-using FreightForwarder.Managers;
+using FreightForwarder.Utils;
 
 namespace FreightForwarder
 {
     /// <summary>
     /// SunController — Controla la rotación del sol basada en la hora del día
     /// </summary>
-    public class SunController : MonoBehaviour
+    public class SunController : Singleton<SunController>
     {
         [Header("Referencias")]
         [SerializeField] private Light _sunLight;
@@ -27,10 +27,11 @@ namespace FreightForwarder
         [SerializeField] private float _maxIntensity = 1.2f;
         
         private float _currentTimeOfDay = 0.5f; // 0 = medianoche, 0.5 = mediodía
-        private int _currentDay = -1;
         
-        private void Start()
+        protected override void OnAwake()
         {
+            base.OnAwake();
+            
             if (_sunLight == null)
                 _sunLight = GetComponent<Light>();
             
@@ -53,7 +54,6 @@ namespace FreightForwarder
         {
             if (_autoRotate && TimeManager.Instance != null && !TimeManager.Instance.IsPaused)
             {
-                // El sol rota según el progreso del día
                 float dayProgress = TimeManager.Instance.DayProgress;
                 _currentTimeOfDay = dayProgress;
                 
@@ -66,14 +66,12 @@ namespace FreightForwarder
         {
             if (TimeManager.Instance == null) return;
             
-            // Al empezar un nuevo día, resetear el sol
             _currentTimeOfDay = 0f;
             ApplySunRotation();
         }
         
         private void ApplySunRotation()
         {
-            // Rotación: 0° = medianoche (sol abajo), 180° = mediodía (sol arriba)
             float sunAngle = _currentTimeOfDay * 180f - 90f;
             transform.rotation = Quaternion.Euler(sunAngle, -30f, 0f);
         }
@@ -82,13 +80,11 @@ namespace FreightForwarder
         {
             if (_sunLight == null) return;
             
-            // Calcular intensidad según la posición del sol
             float intensityFactor = Mathf.Sin(_currentTimeOfDay * Mathf.PI);
             intensityFactor = Mathf.Max(0f, intensityFactor);
             float intensity = Mathf.Lerp(_minIntensity, _maxIntensity, intensityFactor);
             _sunLight.intensity = intensity;
             
-            // Cambiar color de la luz según la hora
             if (_currentTimeOfDay < 0.25f) // Medianoche a Amanecer
             {
                 float t = _currentTimeOfDay / 0.25f;
@@ -114,19 +110,19 @@ namespace FreightForwarder
                 RenderSettings.ambientLight = Color.Lerp(new Color(0.15f, 0.1f, 0.05f), Color.black, t);
             }
             
-            // Actualizar Skybox si existe
             if (_skyboxMaterial != null)
             {
                 _skyboxMaterial.SetColor("_Tint", _sunLight.color * 0.5f);
             }
         }
         
-        private void OnDestroy()
+        protected override void OnDestroy()
         {
             if (TimeManager.Instance != null)
             {
                 TimeManager.Instance.OnDayPassed -= UpdateSunPosition;
             }
+            base.OnDestroy();
         }
     }
 }
