@@ -1,2 +1,0 @@
-# FF-Prototipo
-GameFF
