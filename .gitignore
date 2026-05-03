@@ -1,0 +1,29 @@
+# Unity generated
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+.vs/
+
+# Unity3D generated meta files
+*.pidb
+*.unityproj
+
+# Visual Studio / Rider
+.idea/
+*.suo
+*.userprefs
+*.sln.docstates
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large zip archives
+*.zip
