@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace FreightForwarder.Utils
 {
@@ -26,11 +25,11 @@ namespace FreightForwarder.Utils
         
         public enum CargoType
         {
-            General,
-            Refrigerated,
-            Dangerous,
-            Urgent,
-            Valuable
+            General,        // General cargo
+            Refrigerated,   // Refrigerated cargo
+            Dangerous,      // Hazardous materials
+            Urgent,         // Urgent delivery
+            Valuable        // High value items
         }
         
         // =========================================================================
@@ -39,12 +38,12 @@ namespace FreightForwarder.Utils
         
         public enum ClientType
         {
-            GoodPayer,
-            BadPayer,
-            UrgentClient,
-            CreditClient,
-            VeryBadClient,
-            ContractClient
+            GoodPayer,      // Paga al contado
+            BadPayer,       // Paga tarde
+            UrgentClient,   // Necesita rapidez
+            CreditClient,    // Paga a 30-60 días
+            VeryBadClient,   // Difícil, reclama siempre
+            ContractClient  // Contrato a largo plazo
         }
         
         // =========================================================================
@@ -53,12 +52,12 @@ namespace FreightForwarder.Utils
         
         public enum CargoStatus
         {
-            Available,
-            Quoting,
-            Active,
-            Completed,
-            Failed,
-            Expired
+            Available,      // En el mercado
+            Quoting,        // Cotizando
+            Active,         // En tránsito
+            Completed,      // Entregada
+            Failed,         // Fallida
+            Expired         // Expirada
         }
         
         // =========================================================================
@@ -67,11 +66,11 @@ namespace FreightForwarder.Utils
         
         public enum TransportMode
         {
-            Maritime,
-            Air,
-            Land,
-            Rail,
-            Multimodal
+            Maritime,       // Marítimo
+            Air,            // Aéreo
+            Land,           // Terrestre
+            Rail,           // Ferroviario
+            Multimodal      // Combinado
         }
         
         // =========================================================================
@@ -80,20 +79,20 @@ namespace FreightForwarder.Utils
         
         public enum AgentPersonality
         {
-            Reliable,
-            Cheap,
-            Ambitious,
-            Lazy,
-            Friendly,
-            Elusive,
-            Efficient,
-            Scammer,
-            Liar,
-            Bipolar,
-            Envious,
-            Disappearing,
-            Loyal,
-            Rival
+            Reliable,       // Confiable
+            Cheap,          // Económico
+            Ambitious,      // Ambicioso
+            Lazy,           // Perezoso
+            Friendly,       // Amigable
+            Elusive,        // Esquivo
+            Efficient,      // Eficiente
+            Scammer,        // Estafador
+            Liar,           // Mentiroso
+            Bipolar,        // Bipolar
+            Envious,        // Envidioso
+            Disappearing,   // Desaparece
+            Loyal,          // Leal
+            Rival           // Rival
         }
         
         // =========================================================================
@@ -102,13 +101,13 @@ namespace FreightForwarder.Utils
         
         public enum AgentState
         {
-            Idle,
-            Overworked,
-            Stressed,
-            Angry,
-            Greedy,
-            Disappeared,
-            Bankrupt
+            Idle,           // Libre
+            Overworked,     // Sobrecargado
+            Stressed,       // Estresado
+            Angry,          // Enojado
+            Greedy,         // Codicioso
+            Disappeared,    // Desaparecido
+            Bankrupt        // En quiebra
         }
         
         // =========================================================================
@@ -117,13 +116,13 @@ namespace FreightForwarder.Utils
         
         public enum AgentRelationship
         {
-            Partner,
-            Ally,
-            Friend,
-            Good,
-            Neutral,
-            Bad,
-            Enemy
+            Partner,        // Socio
+            Ally,           // Aliado
+            Friend,         // Amigo
+            Good,           // Bueno
+            Neutral,        // Neutral
+            Bad,            // Malo
+            Enemy           // Enemigo
         }
         
         // =========================================================================
@@ -192,16 +191,22 @@ namespace FreightForwarder.Utils
         // MULTIPLICADORES DE TIPOS DE CARGA
         // =========================================================================
         
-        public static Dictionary<CargoType, float> CargoValueMultipliers { get; private set; }
-        
-        static Constants()
+        private static Dictionary<CargoType, float> _cargoValueMultipliers;
+        public static Dictionary<CargoType, float> CargoValueMultipliers
         {
-            CargoValueMultipliers = new Dictionary<CargoType, float>();
-            CargoValueMultipliers[CargoType.General] = 1.0f;
-            CargoValueMultipliers[CargoType.Refrigerated] = 1.3f;
-            CargoValueMultipliers[CargoType.Dangerous] = 1.5f;
-            CargoValueMultipliers[CargoType.Urgent] = 1.2f;
-            CargoValueMultipliers[CargoType.Valuable] = 1.4f;
+            get
+            {
+                if (_cargoValueMultipliers == null)
+                {
+                    _cargoValueMultipliers = new Dictionary<CargoType, float>();
+                    _cargoValueMultipliers[CargoType.General] = 1.0f;
+                    _cargoValueMultipliers[CargoType.Refrigerated] = 1.3f;
+                    _cargoValueMultipliers[CargoType.Dangerous] = 1.5f;
+                    _cargoValueMultipliers[CargoType.Urgent] = 1.2f;
+                    _cargoValueMultipliers[CargoType.Valuable] = 1.4f;
+                }
+                return _cargoValueMultipliers;
+            }
         }
         
         // =========================================================================
