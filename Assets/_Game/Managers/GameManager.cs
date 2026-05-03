@@ -1,6 +1,8 @@
 using UnityEngine;
 using System;
 using FreightForwarder.Utils;
+using FreightForwarder.Managers;
+using FreightForwarder.Models;
 
 namespace FreightForwarder.Core
 {

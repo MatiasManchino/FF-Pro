@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using System.Linq;
 using FreightForwarder.Managers;
 using FreightForwarder.Models;
 using FreightForwarder.Map;
@@ -80,6 +81,9 @@ namespace FreightForwarder.Core
 
         private void SetupInitialData()
         {
+            // Inicializar base de datos de ciudades
+            CityDatabase.Initialize();
+
             // Desbloquear ciudad inicial
             var buenosAires = CityDatabase.GetCity("buenos_aires");
             if (buenosAires != null)

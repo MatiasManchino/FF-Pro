@@ -28,8 +28,6 @@ namespace FreightForwarder.Managers
         // MÉTODOS PÚBLICOS PARA SAVE/LOAD
         // =========================================================================
         
-        public List<Agent> GetAllAgents() => new List<Agent>(_agents.Values);
-        
         public Dictionary<string, List<string>> GetAgentActiveCargos() => new Dictionary<string, List<string>>(_agentActiveCargos);
         
         public void RestoreState(List<Agent> agents, Dictionary<string, List<string>> agentActiveCargos)
