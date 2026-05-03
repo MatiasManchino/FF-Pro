@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// SceneInitializer configura la escena del juego automáticamente si no existe.
