@@ -25,11 +25,11 @@ namespace FreightForwarder.Utils
         
         public enum CargoType
         {
-            General,        // General cargo
-            Refrigerated,   // Refrigerated cargo
-            Dangerous,      // Hazardous materials
-            Urgent,         // Urgent delivery
-            Valuable        // High value items
+            General,
+            Refrigerated,
+            Dangerous,
+            Urgent,
+            Valuable
         }
         
         // =========================================================================
@@ -38,12 +38,12 @@ namespace FreightForwarder.Utils
         
         public enum ClientType
         {
-            GoodPayer,      // Paga al contado
-            BadPayer,       // Paga tarde
-            UrgentClient,   // Necesita rapidez
-            CreditClient,    // Paga a 30-60 días
-            VeryBadClient,   // Difícil, reclama siempre
-            ContractClient  // Contrato a largo plazo
+            GoodPayer,
+            BadPayer,
+            UrgentClient,
+            CreditClient,
+            VeryBadClient,
+            ContractClient
         }
         
         // =========================================================================
@@ -52,12 +52,12 @@ namespace FreightForwarder.Utils
         
         public enum CargoStatus
         {
-            Available,      // En el mercado
-            Quoting,        // Cotizando
-            Active,         // En tránsito
-            Completed,      // Entregada
-            Failed,         // Fallida
-            Expired         // Expirada
+            Available,
+            Quoting,
+            Active,
+            Completed,
+            Failed,
+            Expired
         }
         
         // =========================================================================
@@ -66,11 +66,11 @@ namespace FreightForwarder.Utils
         
         public enum TransportMode
         {
-            Maritime,       // Marítimo
-            Air,            // Aéreo
-            Land,           // Terrestre
-            Rail,           // Ferroviario
-            Multimodal      // Combinado
+            Maritime,
+            Air,
+            Land,
+            Rail,
+            Multimodal
         }
         
         // =========================================================================
@@ -79,20 +79,20 @@ namespace FreightForwarder.Utils
         
         public enum AgentPersonality
         {
-            Reliable,       // Confiable
-            Cheap,          // Económico
-            Ambitious,      // Ambicioso
-            Lazy,           // Perezoso
-            Friendly,       // Amigable
-            Elusive,        // Esquivo
-            Efficient,      // Eficiente
-            Scammer,        // Estafador
-            Liar,           // Mentiroso
-            Bipolar,        // Bipolar
-            Envious,        // Envidioso
-            Disappearing,   // Desaparece
-            Loyal,          // Leal
-            Rival           // Rival
+            Reliable,
+            Cheap,
+            Ambitious,
+            Lazy,
+            Friendly,
+            Elusive,
+            Efficient,
+            Scammer,
+            Liar,
+            Bipolar,
+            Envious,
+            Disappearing,
+            Loyal,
+            Rival
         }
         
         // =========================================================================
@@ -101,13 +101,13 @@ namespace FreightForwarder.Utils
         
         public enum AgentState
         {
-            Idle,           // Libre
-            Overworked,     // Sobrecargado
-            Stressed,       // Estresado
-            Angry,          // Enojado
-            Greedy,         // Codicioso
-            Disappeared,    // Desaparecido
-            Bankrupt        // En quiebra
+            Idle,
+            Overworked,
+            Stressed,
+            Angry,
+            Greedy,
+            Disappeared,
+            Bankrupt
         }
         
         // =========================================================================
@@ -116,13 +116,13 @@ namespace FreightForwarder.Utils
         
         public enum AgentRelationship
         {
-            Partner,        // Socio
-            Ally,           // Aliado
-            Friend,         // Amigo
-            Good,           // Bueno
-            Neutral,        // Neutral
-            Bad,            // Malo
-            Enemy           // Enemigo
+            Partner,
+            Ally,
+            Friend,
+            Good,
+            Neutral,
+            Bad,
+            Enemy
         }
         
         // =========================================================================
@@ -191,23 +191,14 @@ namespace FreightForwarder.Utils
         // MULTIPLICADORES DE TIPOS DE CARGA
         // =========================================================================
         
-        private static Dictionary<CargoType, float> _cargoValueMultipliers;
-        public static Dictionary<CargoType, float> CargoValueMultipliers
+        public static Dictionary<CargoType, float> CargoValueMultipliers = new Dictionary<CargoType, float>()
         {
-            get
-            {
-                if (_cargoValueMultipliers == null)
-                {
-                    _cargoValueMultipliers = new Dictionary<CargoType, float>();
-                    _cargoValueMultipliers[CargoType.General] = 1.0f;
-                    _cargoValueMultipliers[CargoType.Refrigerated] = 1.3f;
-                    _cargoValueMultipliers[CargoType.Dangerous] = 1.5f;
-                    _cargoValueMultipliers[CargoType.Urgent] = 1.2f;
-                    _cargoValueMultipliers[CargoType.Valuable] = 1.4f;
-                }
-                return _cargoValueMultipliers;
-            }
-        }
+            { CargoType.General, 1.0f },
+            { CargoType.Refrigerated, 1.3f },
+            { CargoType.Dangerous, 1.5f },
+            { CargoType.Urgent, 1.2f },
+            { CargoType.Valuable, 1.4f }
+        };
         
         // =========================================================================
         // MÉTODOS AUXILIARES
