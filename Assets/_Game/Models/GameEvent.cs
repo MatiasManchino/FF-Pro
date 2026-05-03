@@ -240,7 +240,7 @@ namespace FreightForwarder.Models
             // Severidad afecta la probabilidad (eventos más graves son menos comunes)
             probability /= Severity;
             
-            return Math.Clamp(probability, 0.01f, 0.30f);
+            return Mathf.Clamp(probability, 0.01f, 0.30f);
         }
     }
     

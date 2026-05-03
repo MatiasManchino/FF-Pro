@@ -5,7 +5,6 @@ namespace FreightForwarder.Models
 {
     /// <summary>
     /// CityDatabase.cs — Base de datos estática de ciudades.
-    /// 
     /// Contiene el diccionario AllCities accesible globalmente.
     /// </summary>
     public static class CityDatabase
@@ -13,25 +12,34 @@ namespace FreightForwarder.Models
         public static Dictionary<string, WorldCity> AllCities { get; private set; } = new Dictionary<string, WorldCity>();
 
         /// <summary>
-        /// Inicializa la base de datos con las ciudades predefinidas.
+        /// Inicializa la base de datos con 12+ ciudades MVP.
         /// </summary>
         public static void Initialize()
         {
             AllCities.Clear();
 
-            // Lista de ciudades principales
+            // Lista de 12+ ciudades MVP (de Design.md / WorldCity.cs original)
             var cities = new List<WorldCity>
             {
+                // Tier 0 - Inicio
                 new WorldCity("buenos_aires", "Buenos Aires", "Argentina", "South America", -34.6f, -58.4f, true, true, true, true, 0, 60),
+                
+                // Tier 1
+                new WorldCity("sao_paulo", "São Paulo", "Brasil", "South America", -23.5f, -46.6f, true, true, true, true, 1, 70),
                 new WorldCity("miami", "Miami", "Estados Unidos", "North America", 25.8f, -80.2f, true, true, true, true, 1, 80),
+                new WorldCity("lima", "Lima", "Perú", "South America", -12.0f, -77.0f, true, true, true, false, 1, 58),
+                
+                // Tier 2
                 new WorldCity("shanghai", "Shanghai", "China", "Asia", 31.2f, 121.5f, true, true, true, true, 2, 95),
                 new WorldCity("rotterdam", "Rotterdam", "Países Bajos", "Europe", 51.9f, 4.5f, true, true, true, true, 2, 85),
+                new WorldCity("tokyo", "Tokyo", "Japón", "Asia", 35.7f, 139.7f, true, true, false, true, 2, 82),
+                new WorldCity("houston", "Houston", "Estados Unidos", "North America", 29.8f, -95.4f, true, true, true, false, 2, 78),
+                
+                // Tier 3
+                new WorldCity("new_york", "New York", "Estados Unidos", "North America", 40.7f, -74.0f, true, true, true, true, 3, 90),
+                new WorldCity("london", "London", "Reino Unido", "Europe", 51.5f, -0.1f, true, true, false, true, 3, 88),
                 new WorldCity("dubai", "Dubai", "Emiratos Árabes", "Middle East", 25.2f, 55.3f, true, true, false, true, 3, 75),
-                new WorldCity("hamburg", "Hamburg", "Alemania", "Europe", 53.6f, 10.0f, true, true, false, true, 3, 80),
-                new WorldCity("sao_paulo", "São Paulo", "Brasil", "South America", -23.5f, -46.6f, true, true, true, true, 1, 70),
-                new WorldCity("los_angeles", "Los Ángeles", "Estados Unidos", "North America", 34.0f, -118.2f, true, true, true, true, 4, 85),
-                new WorldCity("antwerp", "Amberes", "Bélgica", "Europe", 51.2f, 4.4f, true, true, false, false, 5, 82),
-                new WorldCity("copenhagen", "Copenhague", "Dinamarca", "Europe", 55.7f, 12.6f, true, false, false, false, 6, 52),
+                new WorldCity("singapore", "Singapur", "Singapur", "Asia", 1.3f, 103.8f, true, true, true, true, 3, 90),
             };
 
             foreach (var city in cities)
@@ -47,8 +55,9 @@ namespace FreightForwarder.Models
         /// </summary>
         public static WorldCity GetCity(string id)
         {
-            AllCities.TryGetValue(id, out WorldCity city);
-            return city;
+            if (AllCities.TryGetValue(id, out var city))
+                return city;
+            return null;
         }
 
         /// <summary>

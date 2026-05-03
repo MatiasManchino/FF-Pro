@@ -553,7 +553,9 @@ namespace FreightForwarder.Managers
         
         public float GetRelationshipWithClient(string clientId)
         {
-            return RelationshipWithClients.GetValueOrDefault(clientId, 50f);
+            return RelationshipWithClients.ContainsKey(clientId) 
+    ? RelationshipWithClients[clientId] 
+    : 50f;
         }
         
         public bool IsClientBlacklisted(string clientId)
