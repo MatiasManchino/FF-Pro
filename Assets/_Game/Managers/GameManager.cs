@@ -63,6 +63,9 @@ public class GameManager : Singleton<GameManager>
         // Reiniciar managers
         ResetAllManagers();
 
+        if (TimeManager.Instance != null)
+            TimeManager.Instance.StartGameTime();
+
         // Cargar escena del juego si no estamos en ella y la escena existe
         if (SceneManager.GetActiveScene().name != gameScene)
         {
@@ -101,7 +104,7 @@ public class GameManager : Singleton<GameManager>
     {
         SetGameState(GameState.Menu);
 
-        if (SceneManager.GetActiveScene().name != mainMenuScene)
+        if (SceneManager.GetActiveScene().name != mainMenuScene && SceneExistsInBuildSettings(mainMenuScene))
         {
             SceneManager.LoadScene(mainMenuScene);
         }
@@ -127,7 +130,10 @@ public class GameManager : Singleton<GameManager>
         {
             SetGameState(GameState.Playing);
 
-            if (SceneManager.GetActiveScene().name != gameScene)
+            if (TimeManager.Instance != null)
+                TimeManager.Instance.StartGameTime();
+
+            if (SceneManager.GetActiveScene().name != gameScene && SceneExistsInBuildSettings(gameScene))
             {
                 SceneManager.LoadScene(gameScene);
             }
@@ -247,13 +253,25 @@ public class GameManager : Singleton<GameManager>
     /// Cambia el estado del juego.
     /// </summary>
     /// <param name="newState">Nuevo estado del juego</param>
-    private void SetGameState(GameState newState)
+    public void SetGameState(GameState newState)
     {
         GameState oldState = currentState;
         currentState = newState;
 
         OnGameStateChanged?.Invoke(currentState);
         Debug.Log($"Estado del juego cambiado: {oldState} → {newState}");
+    }
+
+    /// <summary>
+    /// Establece la velocidad del tiempo del juego (delega en TimeManager).
+    /// </summary>
+    /// <param name="scale">Multiplicador de velocidad (1 = normal, 2 = doble, etc.)</param>
+    public void SetTimeScale(float scale)
+    {
+        if (TimeManager.Instance != null)
+        {
+            TimeManager.Instance.SetTimeScale(scale);
+        }
     }
 
     /// <summary>

@@ -1,37 +1,38 @@
 using UnityEngine;
 
 /// <summary>
-/// SunController gestiona la iluminación ambiental y la rotación del sol en el juego.
+/// Mueve el sol (luz direccional) alrededor de la Tierra según la hora del juego.
+/// La Tierra no rota — el sol orbita.
 /// </summary>
 public class SunController : MonoBehaviour
 {
-    [Header("Configuración del sol")]
-    [SerializeField] private Light directionalLight;
-    [SerializeField] private float rotationSpeed = 1f;
-
-    private void Reset()
-    {
-        if (directionalLight == null)
-        {
-            directionalLight = GetComponent<Light>();
-        }
-    }
+    [SerializeField] private Light sunLight;
+    [SerializeField] private float elevation = 23.5f; // inclinación axial
 
     public void Initialize()
     {
-        if (directionalLight == null)
-        {
-            Debug.LogWarning("SunController no tiene luz direccional asignada.");
-            return;
-        }
-
+        if (sunLight == null)
+            sunLight = GetComponent<Light>();
+        UpdateSunAngle();
         Debug.Log("SunController inicializado.");
+    }
+
+    public void SetLight(Light light)
+    {
+        sunLight = light;
     }
 
     private void Update()
     {
-        if (directionalLight == null) return;
+        if (sunLight == null || TimeManager.Instance == null) return;
+        UpdateSunAngle();
+    }
 
-        directionalLight.transform.Rotate(Vector3.right, rotationSpeed * Time.deltaTime);
+    private void UpdateSunAngle()
+    {
+        // El sol recorre 360° en 24 h de juego.
+        // Hora 6 → amanecer (90°), hora 12 → mediodía (180°), hora 0/24 → medianoche (0°/360°)
+        float azimuth = (TimeManager.Instance.CurrentHour / 24f) * 360f;
+        sunLight.transform.rotation = Quaternion.Euler(elevation, azimuth, 0f);
     }
 }

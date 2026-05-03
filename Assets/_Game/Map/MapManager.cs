@@ -44,7 +44,56 @@ public class MapManager : Singleton<MapManager>
 
     private void Start()
     {
+        if (worldCities == null || worldCities.Count == 0)
+            GenerateDefaultCities();
+
         SpawnCityMarkers();
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnGameStateChanged += HandleGameStateChanged;
+            HandleGameStateChanged(GameManager.Instance.CurrentState);
+        }
+    }
+
+    private void GenerateDefaultCities()
+    {
+        worldCities = new List<WorldCity>
+        {
+            WorldCity.CreateCity("Buenos Aires",    "Argentina",      "América del Sur",   -34.6f,  -58.4f),
+            WorldCity.CreateCity("São Paulo",       "Brasil",         "América del Sur",   -23.5f,  -46.6f),
+            WorldCity.CreateCity("New York",        "EE.UU.",         "América del Norte",  40.7f,  -74.0f),
+            WorldCity.CreateCity("Los Ángeles",     "EE.UU.",         "América del Norte",  34.1f, -118.2f),
+            WorldCity.CreateCity("Miami",           "EE.UU.",         "América del Norte",  25.8f,  -80.2f),
+            WorldCity.CreateCity("Ciudad de México","México",         "América del Norte",  19.4f,  -99.1f),
+            WorldCity.CreateCity("Vancouver",       "Canadá",         "América del Norte",  49.3f, -123.1f),
+            WorldCity.CreateCity("Londres",         "Reino Unido",    "Europa",             51.5f,   -0.1f),
+            WorldCity.CreateCity("Rotterdam",       "Países Bajos",   "Europa",             51.9f,    4.5f),
+            WorldCity.CreateCity("Hamburgo",        "Alemania",       "Europa",             53.6f,    9.9f),
+            WorldCity.CreateCity("Casablanca",      "Marruecos",      "África",             33.6f,   -7.6f),
+            WorldCity.CreateCity("Lagos",           "Nigeria",        "África",              6.5f,    3.4f),
+            WorldCity.CreateCity("Johannesburgo",   "Sudáfrica",      "África",            -26.2f,   28.0f),
+            WorldCity.CreateCity("Dubai",           "EAU",            "Oriente Medio",      25.2f,   55.3f),
+            WorldCity.CreateCity("Mumbai",          "India",          "Asia",               19.1f,   72.9f),
+            WorldCity.CreateCity("Singapur",        "Singapur",       "Asia",                1.3f,  103.8f),
+            WorldCity.CreateCity("Shanghái",        "China",          "Asia",               31.2f,  121.5f),
+            WorldCity.CreateCity("Hong Kong",       "China",          "Asia",               22.3f,  114.2f),
+            WorldCity.CreateCity("Tokio",           "Japón",          "Asia",               35.7f,  139.7f),
+            WorldCity.CreateCity("Sídney",          "Australia",      "Oceanía",           -33.9f,  151.2f),
+        };
+        Debug.Log($"MapManager: {worldCities.Count} ciudades predeterminadas generadas.");
+    }
+
+    private void OnDestroy()
+    {
+        if (GameManager.Instance != null)
+            GameManager.Instance.OnGameStateChanged -= HandleGameStateChanged;
+    }
+
+    private void HandleGameStateChanged(GameState state)
+    {
+        bool visible = state == GameState.Playing || state == GameState.Paused;
+        SetMapVisible(visible);
     }
 
     /// <summary>
@@ -227,20 +276,21 @@ public class MapManager : Singleton<MapManager>
     /// <returns>Posición en el espacio del mapa</returns>
     public Vector3 GetCityWorldPosition(WorldCity city)
     {
-        if (city == null)
+        if (city == null || mapRenderer == null)
             return Vector3.zero;
 
-        if (mapRenderer == null)
-            return Vector3.zero;
+        float radius = mapRenderer.bounds.extents.x;
+        Vector3 center = mapRenderer.bounds.center;
 
-        if (!TryGetMapSurfaceAxes(out Vector3 lonAxis, out Vector3 latAxis, out float width, out float height))
-            return mapRenderer.bounds.center;
+        float latRad = city.Latitude * Mathf.Deg2Rad;
+        float lonRad = city.Longitude * Mathf.Deg2Rad;
 
-        float normalizedLon = (city.Longitude + 180f) / 360f - 0.5f;
-        float normalizedLat = (city.Latitude + 90f) / 180f - 0.5f;
+        // Esféricas → Cartesianas (Y arriba, frente en +Z en lon=0)
+        float x = Mathf.Cos(latRad) * Mathf.Sin(lonRad);
+        float y = Mathf.Sin(latRad);
+        float z = Mathf.Cos(latRad) * Mathf.Cos(lonRad);
 
-        Vector3 worldPos = mapRenderer.bounds.center + lonAxis * (normalizedLon * width) + latAxis * (normalizedLat * height);
-        return worldPos;
+        return center + new Vector3(x, y, z) * radius;
     }
 
     private bool TryGetMapSurfaceAxes(out Vector3 lonAxis, out Vector3 latAxis, out float width, out float height)

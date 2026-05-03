@@ -172,6 +172,29 @@ public class WorldCity : ScriptableObject
     }
 
     /// <summary>
+    /// Crea una instancia con datos geográficos completos.
+    /// </summary>
+    public static WorldCity CreateCity(string name, string country, string region,
+        float lat, float lon, bool airport = true, bool port = true, bool rail = true, bool landHub = true)
+    {
+        WorldCity city = CreateInstance<WorldCity>();
+        city.cityName   = name;
+        city.country    = country;
+        city.region     = region;
+        city.latitude   = lat;
+        city.longitude  = lon;
+        city.hasAirport = airport;
+        city.hasPort    = port;
+        city.hasRail    = rail;
+        city.isLandHub  = landHub;
+        city.economicMultiplier = 1f;
+        city.riskMultiplier     = 1f;
+        city.isUnlocked  = true;
+        city.unlockLevel = 1;
+        return city;
+    }
+
+    /// <summary>
     /// Crea una instancia de WorldCity con valores predeterminados para testing.
     /// </summary>
     public static WorldCity CreateTestCity(string name, float lat, float lon, bool airport = true, bool port = true)

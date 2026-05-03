@@ -106,9 +106,9 @@ public static class Constants
     // ═══════════════ TIEMPO ═══════════════
     public const int DAYS_PER_MONTH = 30;
     public const int HOURS_PER_DAY = 24;
-    public const int GAME_START_YEAR = 2024;
-    public const int GAME_START_MONTH = 1;
-    public const int GAME_START_DAY = 1;
+    public const int GAME_START_YEAR = 2023;
+    public const int GAME_START_MONTH = 3;
+    public const int GAME_START_DAY = 20;
 
     // ═══════════════ CARGA ═══════════════
     public const int MAX_ACTIVE_CARGOS = 10;

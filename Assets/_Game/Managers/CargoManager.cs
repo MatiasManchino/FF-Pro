@@ -110,25 +110,32 @@ public class CargoManager : Singleton<CargoManager>
     /// <returns>Carga generada o null si falla</returns>
     private Cargo GenerateRandomCargo()
     {
-        if (availableCities == null || availableCities.Count < 2 ||
-            availableClients == null || availableClients.Count == 0)
+        // Usar listas propias; si están vacías, tomar de los managers globales
+        List<WorldCity> cities = (availableCities != null && availableCities.Count >= 2)
+            ? availableCities
+            : (MapManager.Instance?.WorldCities != null ? new List<WorldCity>(MapManager.Instance.WorldCities) : null);
+
+        List<Client> clients = (availableClients != null && availableClients.Count > 0)
+            ? availableClients
+            : (ClientManager.Instance?.AllClients != null ? new List<Client>(ClientManager.Instance.AllClients) : null);
+
+        if (cities == null || cities.Count < 2 || clients == null || clients.Count == 0)
         {
             Debug.LogWarning("No hay suficientes ciudades o clientes para generar cargas");
             return null;
         }
 
         // Seleccionar ciudades aleatorias
-        WorldCity origin = availableCities[Random.Range(0, availableCities.Count)];
-        WorldCity destination = availableCities[Random.Range(0, availableCities.Count)];
+        WorldCity origin      = cities[Random.Range(0, cities.Count)];
+        WorldCity destination = cities[Random.Range(0, cities.Count)];
 
         // Asegurar que origen y destino sean diferentes
-        while (destination == origin)
-        {
-            destination = availableCities[Random.Range(0, availableCities.Count)];
-        }
+        int attempts = 0;
+        while (destination == origin && attempts++ < 10)
+            destination = cities[Random.Range(0, cities.Count)];
 
         // Seleccionar cliente aleatorio
-        Client client = availableClients[Random.Range(0, availableClients.Count)];
+        Client client = clients[Random.Range(0, clients.Count)];
 
         // Seleccionar tipo de carga basado en probabilidades
         Constants.CargoType cargoType = SelectRandomCargoType();

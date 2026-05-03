@@ -105,30 +105,12 @@ public class GameBootstrapper : MonoBehaviour
 
     /// <summary>
     /// Inicia el flujo principal del juego después de la inicialización.
+    /// GameManager.Initialize() ya determinó el estado inicial (Menu o Playing).
+    /// El tiempo y la carga de guardado se activan cuando el jugador inicia/carga partida.
     /// </summary>
     private void StartGame()
     {
-        Debug.Log("Iniciando juego...");
-
-        // Cargar datos guardados si existen
-        if (SaveManager.Instance != null)
-        {
-            SaveManager.Instance.LoadGame();
-        }
-
-        // Iniciar el tiempo del juego
-        if (TimeManager.Instance != null)
-        {
-            TimeManager.Instance.StartGameTime();
-        }
-
-        // Mostrar pantalla inicial o menú principal
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.StartNewGame();
-        }
-
-        Debug.Log("Juego iniciado correctamente.");
+        Debug.Log("Sistema listo.");
     }
 
     private void OnApplicationQuit()

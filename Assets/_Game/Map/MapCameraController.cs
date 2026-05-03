@@ -1,8 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Controlador simple de cámara para navegar sobre el mapa.
-/// Permite desplazarse y hacer zoom sobre la visualización del mapa.
+/// Controlador de cámara orbital para el globo.
+/// - Botón izquierdo del mouse: orbitar alrededor del globo.
+/// - Rueda del mouse: acercar / alejar.
 /// </summary>
 public class MapCameraController : MonoBehaviour
 {
@@ -10,84 +11,64 @@ public class MapCameraController : MonoBehaviour
     [SerializeField] private Camera targetCamera;
     [SerializeField] private Transform focusPoint;
 
-    [Header("Movimiento")]
-    [SerializeField] private float panSpeed = 5f;
-    [SerializeField] private float zoomSpeed = 200f;
-    [SerializeField] private float minZoomDistance = 10f;
-    [SerializeField] private float maxZoomDistance = 200f;
+    [Header("Órbita")]
+    [SerializeField] private float orbitSpeed = 120f;
 
-    [Header("Rotación")]
-    [SerializeField] private float rotationSpeed = 80f;
+    [Header("Zoom")]
+    [SerializeField] private float zoomSpeed = 8f;
+    [SerializeField] private float minDistance = 6f;
+    [SerializeField] private float maxDistance = 60f;
 
-    private Vector3 lastMousePosition;
+    private Vector3 lastMousePos;
 
     private void Awake()
     {
         if (targetCamera == null)
-        {
             targetCamera = Camera.main;
-        }
     }
+
+    public void SetFocusPoint(Transform t) => focusPoint = t;
+    public void SetCamera(Camera cam)      => targetCamera = cam;
 
     private void Update()
     {
-        HandlePan();
+        if (targetCamera == null) return;
+        HandleOrbit();
         HandleZoom();
-        HandleRotation();
     }
 
-    private void HandlePan()
+    private void HandleOrbit()
     {
-        if (Input.GetMouseButtonDown(2))
+        if (Input.GetMouseButtonDown(0)) lastMousePos = Input.mousePosition;
+
+        if (Input.GetMouseButton(0))
         {
-            lastMousePosition = Input.mousePosition;
-        }
+            Vector3 delta = Input.mousePosition - lastMousePos;
+            lastMousePos  = Input.mousePosition;
 
-        if (Input.GetMouseButton(2))
-        {
-            Vector3 delta = Input.mousePosition - lastMousePosition;
-            Vector3 move = new Vector3(-delta.x, 0f, -delta.y) * panSpeed * Time.deltaTime;
+            Vector3 pivot = focusPoint != null ? focusPoint.position : Vector3.zero;
+            float dt      = Time.unscaledDeltaTime; // usar unscaled para que funcione pausado
+            float hDeg    = delta.x * orbitSpeed * dt;
+            float vDeg    = -delta.y * orbitSpeed * dt;
 
-            if (targetCamera != null)
-            {
-                targetCamera.transform.Translate(move, Space.Self);
-            }
+            targetCamera.transform.RotateAround(pivot, Vector3.up, hDeg);
+            targetCamera.transform.RotateAround(pivot, targetCamera.transform.right, vDeg);
 
-            lastMousePosition = Input.mousePosition;
+            // Mantener cámara mirando al pivote
+            targetCamera.transform.LookAt(pivot);
         }
     }
 
     private void HandleZoom()
     {
-        if (targetCamera == null) return;
-
         float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (Mathf.Abs(scroll) > 0.001f)
-        {
-            float distance = Vector3.Distance(targetCamera.transform.position, focusPoint != null ? focusPoint.position : Vector3.zero);
-            float zoomAmount = scroll * zoomSpeed * Time.deltaTime;
-            float targetDistance = Mathf.Clamp(distance - zoomAmount, minZoomDistance, maxZoomDistance);
-            float deltaDistance = targetDistance - distance;
+        if (Mathf.Abs(scroll) < 0.001f) return;
 
-            if (Mathf.Abs(deltaDistance) > 0.001f)
-            {
-                targetCamera.transform.Translate(Vector3.forward * deltaDistance, Space.Self);
-            }
-        }
-    }
+        Vector3 pivot = focusPoint != null ? focusPoint.position : Vector3.zero;
+        float dist    = Vector3.Distance(targetCamera.transform.position, pivot);
+        float newDist = Mathf.Clamp(dist - scroll * zoomSpeed, minDistance, maxDistance);
 
-    private void HandleRotation()
-    {
-        if (Input.GetMouseButton(1))
-        {
-            float horizontal = Input.GetAxis("Mouse X");
-            float vertical = Input.GetAxis("Mouse Y");
-
-            if (targetCamera != null)
-            {
-                targetCamera.transform.RotateAround(focusPoint != null ? focusPoint.position : Vector3.zero, Vector3.up, horizontal * rotationSpeed * Time.deltaTime);
-                targetCamera.transform.RotateAround(focusPoint != null ? focusPoint.position : Vector3.zero, targetCamera.transform.right, -vertical * rotationSpeed * Time.deltaTime);
-            }
-        }
+        Vector3 dir = (targetCamera.transform.position - pivot).normalized;
+        targetCamera.transform.position = pivot + dir * newDist;
     }
 }
