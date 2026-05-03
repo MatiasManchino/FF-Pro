@@ -786,7 +786,9 @@ namespace FreightForwarder.Managers
         /// </summary>
         public List<GameEvent> GetEventHistory(string cargoId)
         {
-            return EventHistory.GetValueOrDefault(cargoId, new List<GameEvent>());
+            return EventHistory.ContainsKey(cargoId) 
+    ? EventHistory[cargoId] 
+    : new List<GameEvent>();
         }
         
         /// <summary>

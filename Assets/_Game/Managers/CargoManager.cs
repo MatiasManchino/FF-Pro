@@ -213,7 +213,9 @@ namespace FreightForwarder.Managers
             
             // Calcular valor base (1000 - 500000) según distancia y tipo
             float baseValue = 1000f + (distanceKm / 20000f) * 500000f;
-            float multiplier = Constants.CargoValueMultipliers.GetValueOrDefault(cargoType, 1.0f);
+            float multiplier = Constants.CargoValueMultipliers.ContainsKey(cargoType) 
+    ? Constants.CargoValueMultipliers[cargoType] 
+    : 1.0f;
             int declaredValue = Mathf.RoundToInt(baseValue * multiplier * UnityEngine.Random.Range(0.8f, 1.2f));
             declaredValue = Mathf.Clamp(declaredValue, 1000, 500000);
             
