@@ -79,5 +79,22 @@ namespace FreightForwarder.Managers
         
         public string GetFormattedDate() => CurrentDate.ToString("dd MMMM yyyy");
         public string GetShortDate() => CurrentDate.ToString("dd/MM/yyyy");
+
+        // =========================================================================
+        // RESTAURACIÓN DE ESTADO (PARA SAVE/LOAD)
+        // =========================================================================
+        
+        public void RestoreState(int currentDay, DateTime currentDate, float continuousDays)
+        {
+            CurrentDay = currentDay;
+            CurrentDate = currentDate;
+            ContinuousDays = continuousDays;
+            _accumulatedTime = 0f;
+            DayProgress = 0f;
+            
+            OnDateChanged?.Invoke(CurrentDate);
+            
+            Debug.Log($"[TimeManager] Estado restaurado. Día {CurrentDay} | Fecha: {CurrentDate:dd/MM/yyyy}");
+        }
     }
 }

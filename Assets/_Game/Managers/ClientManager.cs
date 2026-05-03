@@ -59,6 +59,59 @@ namespace FreightForwarder.Managers
         //public event Action<Client, Quote> OnQuoteRejected;
         //public event Action<Client, int> OnCounterOfferReceived;
         public event Action<Client> OnClientBlacklisted;
+
+        // =========================================================================
+        // MÉTODOS PÚBLICOS PARA SAVE/LOAD
+        // =========================================================================
+        
+        public List<Client> GetAllClients() => new List<Client>(Clients.Values);
+        
+        public void RestoreState(List<Client> clients, Dictionary<string, float> relationships)
+        {
+            Clients.Clear();
+            RelationshipWithClients.Clear();
+            PendingQuotes.Clear();
+            
+            if (clients != null)
+            {
+                foreach (var client in clients)
+                {
+                    Clients[client.Id] = client;
+                    RelationshipWithClients[client.Id] = client.RelationshipLevel;
+                    PendingQuotes[client.Id] = new List<Quote>();
+                }
+            }
+            
+            if (relationships != null)
+            {
+                foreach (var kvp in relationships)
+                {
+                    RelationshipWithClients[kvp.Key] = kvp.Value;
+                }
+            }
+            
+            Debug.Log($"[ClientManager] Estado restaurado. Clientes: {Clients.Count}");
+        }
+        
+        public void RestorePendingQuotes(List<Quote> pendingQuotes)
+        {
+            if (pendingQuotes == null) return;
+            
+            foreach (var quote in pendingQuotes)
+            {
+                if (!string.IsNullOrEmpty(quote.ClientId) && PendingQuotes.ContainsKey(quote.ClientId))
+                {
+                    PendingQuotes[quote.ClientId].Add(quote);
+                }
+            }
+        }
+        
+        public List<Agent> GetAllAgents()
+        {
+            if (AgentManager.Instance != null)
+                return AgentManager.Instance.GetAllAgents();
+            return new List<Agent>();
+        }
         
         // =========================================================================
         // INICIALIZACIÓN
