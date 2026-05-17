@@ -4,6 +4,10 @@ using FreightForwarder.Models;
 using FreightForwarder.Managers;
 using FreightForwarder.Map;
 using FreightForwarder.Weather;
+using FreightForwarder.Systems.World;
+using FreightForwarder.Systems.Progression;
+using FreightForwarder.Systems.Logistics;
+using FreightForwarder.Utils;
 
 public class GameBootstrapper : MonoBehaviour
 {
@@ -57,13 +61,30 @@ public class GameBootstrapper : MonoBehaviour
         _ = WeatherImpact.Instance;
         _ = HurricaneController.Instance;
 
+        // Sistemas V2 (FASE 4-9) — activados por FeatureFlags
+        if (FeatureFlags.USE_WORLD_STATE)
+        {
+            _ = WorldStateManager.Instance;
+            _ = NewsManager.Instance;
+        }
+        if (FeatureFlags.USE_PROGRESSION)
+        {
+            _ = ProgressionManager.Instance;
+        }
+        if (FeatureFlags.USE_ROUTE_GRAPH)
+        {
+            RouteGraph.Instance.Build(CityDatabase.AllCities);
+        }
+
         // Inicializar el sistema de clima explícitamente
-        // (no esperar al Start() para evitar problemas de orden de lifecycle)
         var weatherSys = WeatherSystem.Instance;
         weatherSys.Activate();
 
         GameManager.Instance.StartNewGame();
-        Debug.Log("[Bootstrap] Sistemas FF inicializados. Sistema de nubes activo.");
+        Debug.Log($"[Bootstrap] Sistemas FF inicializados. " +
+                  $"RouteGraph={FeatureFlags.USE_ROUTE_GRAPH} " +
+                  $"WorldState={FeatureFlags.USE_WORLD_STATE} " +
+                  $"Progression={FeatureFlags.USE_PROGRESSION}");
     }
 
     private void EnsureTimeManager()

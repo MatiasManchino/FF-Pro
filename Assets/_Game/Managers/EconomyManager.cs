@@ -46,13 +46,14 @@ namespace FreightForwarder.Managers
 
         public bool SubtractMoney(int amount, string reason = "")
         {
+            bool hadFunds = Money >= amount;
             Money -= amount;
             TotalCosts += amount;
             OnMoneyChanged?.Invoke(Money);
             if (!string.IsNullOrEmpty(reason))
-                Debug.Log($"[Economy] -${amount} — {reason}. Total: ${Money}");
+                Debug.Log($"[Economy] -${amount} — {reason}. Total: ${Money}{(!hadFunds ? " [SIN FONDOS]" : "")}");
             CheckGameOver();
-            return true;
+            return hadFunds;
         }
 
         // ═══════════════════════════════════

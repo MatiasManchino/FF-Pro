@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using FreightForwarder.Models;
 using FreightForwarder.Utils;
+using FreightForwarder.Systems.Logistics;
+using FreightForwarder.Systems.Progression;
 using UnityEngine;
 
 namespace FreightForwarder.Managers
@@ -216,7 +218,8 @@ namespace FreightForwarder.Managers
             Agent agent = AgentManager.Instance?.GetAgent(quote.AgentId);
             float speed = agent?.GetCurrentSpeedMultiplier() ?? 1f;
 
-            int baseDays = CalculateTransitDays(quote.TransportMode, distance, speed);
+            int baseDays = CalculateTransitDaysV2(cargo.OriginCityId, cargo.DestinationCityId,
+                                                   quote.TransportMode, speed);
             cargo.TotalTransitDays = baseDays;
             cargo.DaysRemaining = baseDays;
             cargo.EstimatedArrivalDay = currentDay + baseDays;
@@ -229,6 +232,16 @@ namespace FreightForwarder.Managers
 
         private int CalculateTransitDays(Constants.TransportMode mode, float distanceKm, float speedMult)
         {
+            // V2: usa RouteGraph si está activo
+            if (FeatureFlags.USE_ROUTE_GRAPH && RouteGraph.Instance.IsBuilt)
+            {
+                // speedMult ya viene del agente; el RouteGraph lo aplica internamente
+                return RouteGraph.Instance
+                    .FindRoute("", "", mode, speedMult)
+                    .TotalDays; // fallback con distancia directa
+            }
+
+            // V1 legacy: Haversine directo
             float kmPerDay;
             switch (mode)
             {
@@ -236,10 +249,22 @@ namespace FreightForwarder.Managers
                 case Constants.TransportMode.Land:       kmPerDay = 600f;   break;
                 case Constants.TransportMode.Rail:       kmPerDay = 800f;   break;
                 case Constants.TransportMode.Multimodal: kmPerDay = 3000f;  break;
-                default:                                 kmPerDay = 2000f;  break; // Maritime
+                default:                                 kmPerDay = 2000f;  break;
             }
             int days = Mathf.CeilToInt(distanceKm / (kmPerDay * speedMult));
             return Mathf.Max(1, days);
+        }
+
+        private int CalculateTransitDaysV2(string originId, string destId,
+                                            Constants.TransportMode mode, float speedMult)
+        {
+            if (!FeatureFlags.USE_ROUTE_GRAPH || !RouteGraph.Instance.IsBuilt)
+                return CalculateTransitDays(mode,
+                    CityDatabase.GetDistance(originId, destId), speedMult);
+
+            float worldFuel = FreightForwarder.Systems.World.WorldStateManager.Instance?.FuelMultiplier ?? 1f;
+            var result = RouteGraph.Instance.FindRoute(originId, destId, mode, speedMult, worldFuel);
+            return result.TotalDays;
         }
 
         // ═══════════════════════════════════
@@ -259,6 +284,9 @@ namespace FreightForwarder.Managers
             AgentManager.Instance?.RecordDelivery(cargo.AgentId, cargo.Id, true, false);
             ClientManager.Instance?.NotifyDelivery(cargo.ClientId, true,
                 cargo.OriginCityId, cargo.DestinationCityId, currentDay);
+
+            if (FeatureFlags.USE_AGENT_BONUS)
+                AgentBonusSystem.RecordRoute(cargo.AgentId, cargo.OriginCityId, cargo.DestinationCityId);
 
             OnCargoCompleted?.Invoke(cargo);
         }
