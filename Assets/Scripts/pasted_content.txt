@@ -1,0 +1,170 @@
+Eres un ingeniero senior en Unity 6 especializado en simulaciones planetarias, coordenadas geográficas y rendering físico realista.
+
+Estás trabajando en el proyecto:
+
+Freight Forwarder Pro (Unity, C#)
+
+Tu tarea es corregir y reconstruir el sistema completo de mapa 3D, tiempo e iluminación solar realista, eliminando bugs actuales y logrando comportamiento similar a Google Earth pero optimizado para videojuego.
+
+🔴 PROBLEMAS ACTUALES (CRÍTICOS)
+CityMarkers flotando
+Están mal posicionados (no usan coordenadas esféricas correctas).
+No están alineados con la normal de la esfera.
+Iluminación incorrecta
+Existe una luz que NO representa el sol.
+La Tierra está iluminada de forma incorrecta (no respeta hemisferios día/noche).
+Tiempo desacoplado del mundo
+No hay relación real entre hora, rotación terrestre y luz solar.
+Cámara mal inicializada
+No inicia en Buenos Aires.
+Falta navegación fluida tipo globo 3D.
+UI mal posicionada
+El control de velocidad no está centrado en el HUB superior.
+🧠 REQUISITOS TÉCNICOS OBLIGATORIOS
+🌍 1. SISTEMA DE COORDENADAS (CRÍTICO)
+
+Implementar correctamente:
+
+Conversión de Latitud/Longitud → posición 3D en esfera:
+Vector3 LatLonToPosition(float lat, float lon, float radius)
+Fórmula correcta:
+lat en radianes
+lon en radianes
+Asegurar:
+Posición EXACTA sobre la superficie
+Rotación del marker alineada con la normal (transform.up = normal)
+☀️ 2. ILUMINACIÓN SOLAR REAL (NO FAKE)
+
+Implementar sistema físico simplificado:
+
+El sol es una Directional Light real
+Debe iluminar SIEMPRE solo la mitad del planeta
+Cálculo obligatorio:
+Basado en:
+Fecha
+Hora (Buenos Aires UTC-3)
+Rotación de la Tierra
+La Tierra debe rotar en eje Y según el tiempo
+El sol debe permanecer fijo en el espacio (recomendado)
+o moverse correctamente respecto al planeta
+Resultado esperado:
+Si en Buenos Aires es de noche → Europa o Asia deben estar iluminados
+Transiciones suaves (amanecer/atardecer)
+⏱️ 3. TIME MANAGER (PRECISO)
+1 día = 1200 segundos reales
+
+Velocidades:
+
+0x, 1x, 3x, 5x, 10x, 50x, 100x
+
+Fecha inicial:
+
+20/03/2023 00:00 (Buenos Aires)
+
+Exponer:
+
+float DayProgress (0–1)
+DateTime CurrentTime
+TODO el sistema debe depender de este tiempo (NO Time.time directo)
+🌎 4. MAPA 3D
+La Tierra es una esfera perfecta
+Radio configurable: ~10
+Texturas:
+
+Ruta:
+
+Assets/Art/Map/Resources/Map/Textures/
+
+Archivos:
+
+01.jpg a 12.jpg
+Cambian según mes
+Implementar transición suave (shader o Lerp)
+📍 5. CITY MARKERS (FIX TOTAL)
+
+Cada ciudad debe:
+
+Usar lat/lon real
+Estar PEGADA a la superficie (sin offset incorrecto)
+Rotar correctamente hacia afuera
+Escalar levemente sobre la superficie (offset mínimo opcional)
+🎥 6. CÁMARA (ESTILO GOOGLE EARTH)
+
+Controles:
+
+Click derecho + drag → rotar planeta
+Scroll → zoom suave
+Click en ciudad → focus + zoom suave
+Botón reset
+Inicio:
+La cámara DEBE iniciar centrada en:
+Buenos Aires
+Lat: -34.6037
+Lon: -58.3816
+🌞 7. REGLA CLAVE DE ILUMINACIÓN
+
+⚠️ IMPORTANTE:
+
+NO quiero “la tierra siempre iluminada completamente”
+QUIERO:
+Día/noche REAL GLOBAL
+Dependiente de hora de Buenos Aires
+Ejemplo real:
+19:00 en Buenos Aires → oscuro
+China → de día
+
+Referencia conceptual:
+https://24timezones.com/es/difference/buenos_aires
+
+🧩 8. UI (HUB SUPERIOR)
+Centrar controles de tiempo arriba
+
+Mostrar:
+
+Fecha + Hora (Buenos Aires)
+Velocidad actual
+🧱 9. ARQUITECTURA
+Usar:
+Singletons donde tenga sentido
+Eventos para desacoplar sistemas
+
+Scripts esperados:
+
+TimeManager.cs
+SunController.cs
+WorldMap.cs
+CityMarker.cs
+MapCameraController.cs
+📦 TAREA
+Generar código COMPLETO y FUNCIONAL de:
+TimeManager.cs
+SunController.cs (iluminación real correcta)
+MapCameraController.cs
+Corregir:
+Posicionamiento de CityMarker
+Lógica clave de WorldMap
+Explicar:
+Orden de inicialización (GameBootstrapper)
+Configuración de la luz solar en Unity
+Ajustes de materiales/shaders
+🎯 OBJETIVO FINAL
+
+Quiero un sistema donde:
+
+El planeta rota correctamente
+El sol ilumina físicamente correcto
+Las ciudades están perfectamente ubicadas
+La cámara se siente profesional
+El tiempo controla TODO
+
+Nivel esperado: simulador tipo Google Earth simplificado pero robusto
+
+💡 POR QUÉ ESTE PROMPT ES MEJOR
+
+Este prompt:
+
+Elimina ambigüedad
+Obliga a usar matemática correcta
+Evita “sol fake”
+Define responsabilidades claras
+Reduce errores típicos de IA
