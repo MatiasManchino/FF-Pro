@@ -42,7 +42,10 @@ namespace FreightForwarder.UI
             {
                 EconomyManager.Instance.OnLevelUp           += OnLevelUp;
                 EconomyManager.Instance.OnReputationChanged += OnRepChanged;
-                EconomyManager.Instance.OnGameOver          += OnGameOver;
+            }
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnGameOver += OnGameOver;
             }
             if (CargoManager.Instance != null)
             {
@@ -67,7 +70,10 @@ namespace FreightForwarder.UI
             {
                 EconomyManager.Instance.OnLevelUp           -= OnLevelUp;
                 EconomyManager.Instance.OnReputationChanged -= OnRepChanged;
-                EconomyManager.Instance.OnGameOver          -= OnGameOver;
+            }
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.OnGameOver -= OnGameOver;
             }
             if (CargoManager.Instance != null)
             {

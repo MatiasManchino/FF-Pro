@@ -263,12 +263,12 @@ public class GameBootstrapper : MonoBehaviour
         
         // Sudeste Asiático
         SpawnCity("Singapur", 2.14f, 103.82f, yellow);
-        SpawnCity("Bangkok", 16.14f, 100.52f, yellow);
-        SpawnCity("Ho Chi Minh", 12.84f, 106.63f, yellow);
+        SpawnCity("Bangkok", 13.84f, 101.16f, yellow);
+        SpawnCity("Ho Chi Minh", 10.82f, 107.67f, yellow);
         SpawnCity("Manila", 17.10f, 120.98f, yellow);
         
         // Asia del Este
-        SpawnCity("Hong Kong", 25.82f, 114.17f, yellow);
+        SpawnCity("Hong Kong", 23.19f, 114.58f, yellow);
         SpawnCity("Shanghái", 35.88f, 121.47f, yellow);
         SpawnCity("Taipéi", 28.88f, 121.57f, yellow);
         SpawnCity("Tokio", 40.90f, 139.69f, yellow);
@@ -283,25 +283,29 @@ public class GameBootstrapper : MonoBehaviour
 
     private void SpawnCity(string cityName, float lat, float lon, Color color)
     {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
         go.name = cityName;
-        go.transform.localScale = new Vector3(5f, 0.8f, 5f);
+        go.transform.localScale = new Vector3(85f, 85f, 1f);
 
-        Destroy(go.GetComponent<Collider>());                    // Eliminar collider del cilindro
-        var col = go.AddComponent<SphereCollider>();            // Agregar SphereCollider
-        col.radius = 11f;                                        // Radio grande para el mouse
+        Destroy(go.GetComponent<Collider>());
+        var col = go.AddComponent<SphereCollider>();
+        col.radius = 1f;
 
-        var rend = go.GetComponent<MeshRenderer>();
-        var mat  = new Material(Shader.Find("Unlit/Color"));
-        mat.color = color;
-        rend.sharedMaterial   = mat;
+        var rend   = go.GetComponent<MeshRenderer>();
+        var shader = Shader.Find("FF/CityMarker");
+        var mat    = new Material(shader != null ? shader : Shader.Find("Unlit/Color"));
+        mat.color  = color;
+        rend.sharedMaterial    = mat;
         rend.shadowCastingMode = ShadowCastingMode.Off;
         rend.receiveShadows    = false;
+
+        if (shader == null)
+            Debug.LogWarning($"[Bootstrap] Shader 'FF/CityMarker' no encontrado para {cityName}.");
 
         var marker = go.AddComponent<CityMarker>();
         marker.cityName      = cityName;
         marker.latitude      = lat;
         marker.longitude     = lon;
-        marker.surfaceOffset = -4f;
+        marker.surfaceOffset = 2f;
     }
 }

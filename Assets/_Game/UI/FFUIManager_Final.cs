@@ -51,18 +51,6 @@ namespace FreightForwarder.UI
             _marketPanel   = FindAnyObjectByType<MarketPanel>();
             _camController = FindAnyObjectByType<MapCameraController>();
 
-            // Garantizar que todos los managers FF existan (resiliencia si FFInitializer no está en la escena)
-            CityDatabase.Initialize();
-            var _1  = GameManager.Instance;
-            var _2  = FFTimeManager.Instance;
-            var _3  = EconomyManager.Instance;
-            var _4  = AgentManager.Instance;
-            var _5  = ClientManager.Instance;
-            var _6  = CargoManager.Instance;
-            var _7  = EventManager.Instance;
-            var _8  = RouteManager.Instance;
-            GameManager.Instance?.StartNewGame();
-
             if (EventManager.Instance != null)
                 EventManager.Instance.OnEventTriggered += OnEventTriggered;
         }

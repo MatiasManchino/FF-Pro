@@ -89,6 +89,13 @@ namespace FreightForwarder.Managers
                 FFTimeManager.Instance.OnDayPassed += ProcessAgentDecisions;
         }
 
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (FFTimeManager.Instance != null)
+                FFTimeManager.Instance.OnDayPassed -= ProcessAgentDecisions;
+        }
+
         private void ProcessAgentDecisions()
         {
             foreach (var agent in _agents.Values)

@@ -27,8 +27,13 @@ namespace FreightForwarder.Weather
         private float _sizePhase;
         private float _alphaFreq;
         private float _alphaPhase;
+        private float _stretchX = 1f;
+        private float _stretchY = 1f;
 
-        private static readonly int PropAlpha = Shader.PropertyToID("_Alpha");
+        private static readonly int PropAlpha       = Shader.PropertyToID("_Alpha");
+        private static readonly int PropNightFactor = Shader.PropertyToID("_NightFactor");
+        private static readonly int PropStretchDir  = Shader.PropertyToID("_StretchDir");
+        private static readonly int PropSphereR     = Shader.PropertyToID("_SphereR");
 
         private const float CLOUD_HEIGHT = 60f;
 
@@ -59,19 +64,28 @@ namespace FreightForwarder.Weather
             // Guardar escala base y generar fases aleatorias para que cada nube
             // tenga su propio ritmo de respiración, sin sincronizarse con las demás
             _baseScale  = transform.localScale.x;
-            _sizeFreq   = Random.Range(0.04f, 0.10f);  // período 63–157 s → muy lento
+            _sizeFreq   = Random.Range(0.04f, 0.10f);
             _sizePhase  = Random.Range(0f, Mathf.PI * 2f);
-            _alphaFreq  = Random.Range(0.06f, 0.14f);  // período 45–105 s
+            _alphaFreq  = Random.Range(0.06f, 0.14f);
             _alphaPhase = Random.Range(0f, Mathf.PI * 2f);
+            _stretchX   = 1f;
+            _stretchY   = 1f;
 
-            _mat = new Material(shader) { mainTexture = tex };
-            _mat.renderQueue = 3002;
+            // Pool: reutilizar el material si ya existe en lugar de crear uno nuevo cada vez.
+            if (_mat == null)
+            {
+                _mat = new Material(shader);
+                _mat.renderQueue = 3002;
+                float sphereR = WorldMap.Instance != null
+                    ? WorldMap.Instance.earthRadius + CLOUD_HEIGHT : 1060f;
+                _mat.SetFloat(PropSphereR, sphereR);
+                var rend = GetComponent<MeshRenderer>();
+                rend.sharedMaterial    = _mat;
+                rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                rend.receiveShadows    = false;
+            }
+            _mat.mainTexture = tex;
             _mat.SetFloat(PropAlpha, _currentAlpha);
-
-            var rend = GetComponent<MeshRenderer>();
-            rend.sharedMaterial    = _mat;
-            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            rend.receiveShadows    = false;
         }
 
         // ── Update ───────────────────────────────────────────────────────────
@@ -98,6 +112,18 @@ namespace FreightForwarder.Weather
             if (Lon < -180f) Lon += 360f;
             Lat = Mathf.Clamp(Lat + (baseLat + DriftLat) * dt, -80f, 80f);
 
+            // Deformación lenta hacia el sentido de traslado
+            float dLon = baseLon + DriftLon;
+            float dLat = baseLat + DriftLat;
+            float dMag = Mathf.Max(0.001f, Mathf.Sqrt(dLon * dLon + dLat * dLat));
+            float nX   = dLon / dMag;
+            float nY   = dLat / dMag;
+            float targetStretchX = 1f + 0.48f * (nX * nX) - 0.20f * (nY * nY);
+            float targetStretchY = 1f + 0.68f * (nY * nY) - 0.20f * (nX * nX);
+            _stretchX = Mathf.Lerp(_stretchX, targetStretchX, Time.deltaTime * 0.4f);
+            _stretchY = Mathf.Lerp(_stretchY, targetStretchY, Time.deltaTime * 0.4f);
+            _mat?.SetVector(PropStretchDir, new Vector4(nX, nY, 0f, 0f));
+
             // Alpha con fade in/out
             const float FADE_IN  = 2f;
             const float FADE_OUT = 3f;
@@ -113,17 +139,45 @@ namespace FreightForwarder.Weather
             float alphaBreath = 1f + Mathf.Sin(_age * _alphaFreq + _alphaPhase) * 0.12f;
             _mat?.SetFloat(PropAlpha, Mathf.Clamp01(_currentAlpha * alphaBreath));
 
+            // Día / noche: dot product entre dirección de la nube y la dirección del sol.
+            // smoothstep sobre una zona de ±12° alrededor del terminador → transición gradual.
+            _mat?.SetFloat(PropNightFactor, ComputeDaylightFactor());
+
             // Respiración de tamaño: ±9 % de la escala base, período 63–157 s por sprite
-            float sizeBreath = 1f + Mathf.Sin(_age * _sizeFreq + _sizePhase) * 0.09f;
-            transform.localScale = Vector3.one * (_baseScale * sizeBreath);
+            float sizeBreath = 1f + Mathf.Sin(_age * _sizeFreq + _sizePhase) * 0.29f;
+            transform.localScale = new Vector3(
+                _baseScale * sizeBreath * _stretchX,
+                _baseScale * sizeBreath * _stretchY,
+                1f);
 
             UpdateWorldPosition();
 
-            // Auto-destrucción inmediata al morir: libera el slot sin esperar el Refresh
-            if (Dead) Destroy(gameObject);
+            // Al morir, devolver al pool en lugar de destruir el GameObject
+            if (Dead) { CloudRenderer.Instance?.Release(this); return; }
         }
 
         public void BeginDespawn() => _despawning = true;
+
+        private float ComputeDaylightFactor()
+        {
+            if (SunController.Instance == null || WorldMap.Instance == null) return 1f;
+
+            // Reproducir exactamente cómo CityMarker detecta día/noche:
+            // calcular la posición world del sprite (igual que UpdateWorldPosition) y
+            // pasarla a GetSunAngleAtPosition → ángulo en grados sobre/bajo el horizonte.
+            Vector3 dir      = LatLonToDir(Lat, Lon);
+            float   localR   = (WorldMap.Instance.earthRadius + CLOUD_HEIGHT)
+                               / (WorldMap.Instance.earthRadius * 2f);
+            Vector3 worldPos = WorldMap.Instance.transform.TransformPoint(dir * localR);
+
+            float angle = SunController.Instance.GetSunAngleAtPosition(
+                              worldPos, WorldMap.Instance.transform.position);
+
+            // Normalizar el ángulo a [0,1] y luego aplicar la curva suave.
+            // Mathf.SmoothStep(a,b,t) interpola entre a y b, NO es el smoothstep de HLSL.
+            // InverseLerp convierte el rango [-20°,+20°] → [0,1] antes de pasarlo.
+            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-20f, 20f, angle));
+        }
 
         // ── Posición + orientación tangente ───────────────────────────────────
 

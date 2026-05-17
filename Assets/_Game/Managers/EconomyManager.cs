@@ -146,10 +146,7 @@ namespace FreightForwarder.Managers
         private void CheckGameOver()
         {
             if (IsGameOver())
-            {
-                OnGameOver?.Invoke();
                 GameManager.Instance?.TriggerGameOver();
-            }
         }
 
         // ═══════════════════════════════════

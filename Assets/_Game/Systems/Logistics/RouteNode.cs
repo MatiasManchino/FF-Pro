@@ -11,6 +11,7 @@ namespace FreightForwarder.Systems.Logistics
         public bool   HasPort     { get; }
         public bool   HasAirport  { get; }
         public bool   IsLandHub   { get; }
+        public string LandZone    { get; }
 
         public readonly List<RouteEdge> Edges = new List<RouteEdge>();
 
@@ -22,6 +23,7 @@ namespace FreightForwarder.Systems.Logistics
             HasPort    = city.HasPort;
             HasAirport = city.HasAirport;
             IsLandHub  = city.IsLandHub;
+            LandZone   = city.LandZone;
         }
     }
 }

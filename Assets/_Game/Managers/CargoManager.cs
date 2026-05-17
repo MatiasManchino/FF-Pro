@@ -47,6 +47,13 @@ namespace FreightForwarder.Managers
             for (int i = 0; i < initial; i++) GenerateCargo();
         }
 
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (FFTimeManager.Instance != null)
+                FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
+        }
+
         private void RefreshUnlockedCities()
         {
             _unlockedCityIds.Clear();

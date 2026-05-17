@@ -25,6 +25,13 @@ namespace FreightForwarder.Managers
                 FFTimeManager.Instance.OnDayPassed += ProcessDailyEvents;
         }
 
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (FFTimeManager.Instance != null)
+                FFTimeManager.Instance.OnDayPassed -= ProcessDailyEvents;
+        }
+
         // ═══════════════════════════════════
         // POOL DE EVENTOS
         // ═══════════════════════════════════

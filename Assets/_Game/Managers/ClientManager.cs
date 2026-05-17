@@ -46,6 +46,13 @@ namespace FreightForwarder.Managers
                 FFTimeManager.Instance.OnDayPassed += ProcessDailyUpdates;
         }
 
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            if (FFTimeManager.Instance != null)
+                FFTimeManager.Instance.OnDayPassed -= ProcessDailyUpdates;
+        }
+
         private void ProcessDailyUpdates()
         {
             int currentDay = FFTimeManager.Instance?.CurrentDay ?? 1;

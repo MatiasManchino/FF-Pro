@@ -24,8 +24,8 @@ namespace FreightForwarder.Weather
         private const int   MAX_SPRITES     = 250;
         private const float CLOUD_THRESHOLD = 0.28f;
         private const float STORM_THRESHOLD = 0.52f;
-        private const float SPRITE_MIN_SIZE = 60f;      // variedad grande: 60–260 world units
-        private const float SPRITE_MAX_SIZE = 260f;
+        private const float SPRITE_MIN_SIZE = 30f;
+        private const float SPRITE_MAX_SIZE = 380f;
         private const float STORM_SIZE_MULT = 1.5f;
         private const float LIFETIME_MIN    = 100f;
         private const float LIFETIME_MAX    = 260f;
@@ -44,6 +44,12 @@ namespace FreightForwarder.Weather
         // Una marca por región: cuántos sprites tiene actualmente
         private readonly int[] _regionSpriteCount = new int[REGION_W * REGION_H];
 
+        // Malla subdividida compartida (generada una vez, usada por todos los sprites)
+        private static Mesh _sharedCloudMesh;
+
+        // Pool de sprites pre-instanciados — se activan/desactivan en lugar de crear/destruir
+        private CloudSpriteInstance[] _pool;
+
         // ── Init ──────────────────────────────────────────────────────────────
 
         public void Initialize(WeatherGrid grid, WeatherConfig config)
@@ -53,6 +59,7 @@ namespace FreightForwarder.Weather
 
             LoadTextures();
             ResolveShader();
+            if (_cloudShader != null) BuildPool();
 
             HurricaneController.Instance?.Initialize(_hurricaneTex);
 
@@ -129,9 +136,7 @@ namespace FreightForwarder.Weather
 
             if (_cloudTextures == null || _cloudTextures.Length == 0 || _cloudShader == null) return;
 
-            // Limpiar referencias nulas (sprites que se auto-destruyeron)
-            for (int i = _sprites.Count - 1; i >= 0; i--)
-                if (_sprites[i] == null) _sprites.RemoveAt(i);
+            // Pool: los sprites se devuelven solos vía Release() — no hay referencias nulas
 
             // Rellenar hasta el mínimo con distribución uniforme por latitud
             if (_sprites.Count < MIN_SPRITES)
@@ -160,6 +165,7 @@ namespace FreightForwarder.Weather
                 ResolveShader();
                 if (_hurricaneTex != null) HurricaneController.Instance?.Initialize(_hurricaneTex);
             }
+            if (_pool == null && _cloudShader != null) BuildPool();
 
             if (_cloudTextures == null || _cloudTextures.Length == 0 || _cloudShader == null)
             {
@@ -169,15 +175,7 @@ namespace FreightForwarder.Weather
 
             _grid = grid;
 
-            // Limpiar sprites muertos
-            for (int i = _sprites.Count - 1; i >= 0; i--)
-            {
-                if (_sprites[i] == null || _sprites[i].Dead)
-                {
-                    if (_sprites[i] != null) Destroy(_sprites[i].gameObject);
-                    _sprites.RemoveAt(i);
-                }
-            }
+            // Pool: sprites muertos se devuelven solos vía Release(), no hay que destruirlos
 
             // Recalcular conteo por región
             System.Array.Clear(_regionSpriteCount, 0, _regionSpriteCount.Length);
@@ -288,18 +286,15 @@ namespace FreightForwarder.Weather
 
         private void SpawnSprite(float centerLat, float centerLon, float cloudVal, bool isStorm)
         {
-            if (_cloudShader == null || _cloudTextures.Length == 0)
-            {
-                Debug.LogError($"[CloudRenderer] SpawnSprite bloqueado: shader={_cloudShader != null}, tex={_cloudTextures.Length}");
-                return;
-            }
+            if (_cloudShader == null || _cloudTextures.Length == 0 || _pool == null) return;
             if (_refreshCount <= 2)
                 Debug.Log($"[CloudRenderer] Spawneando sprite en ({centerLat:F0},{centerLon:F0}), storm={isStorm}");
 
-            // Nube aleatoria del pool
+            var sprite = Acquire(isStorm);
+            if (sprite == null) return; // pool agotado
+
             var tex = _cloudTextures[Random.Range(0, _cloudTextures.Length)];
 
-            // Jitter ajustado para que las 3-5 nubes de un cluster queden visiblemente agrupadas
             float jitterLat = Random.Range(-4f, 4f);
             float jitterLon = Random.Range(-6f, 6f);
             float lat = Mathf.Clamp(centerLat + jitterLat, -80f, 80f);
@@ -308,25 +303,14 @@ namespace FreightForwarder.Weather
             float alpha    = Random.Range(0.2f, 0.7f);
             float lifetime = Random.Range(LIFETIME_MIN, LIFETIME_MAX);
 
-            // Tamaño
-            float baseSize = Random.Range(SPRITE_MIN_SIZE, SPRITE_MAX_SIZE);
+            float t        = Mathf.Sqrt(Random.value);
+            float baseSize = Mathf.Lerp(SPRITE_MIN_SIZE, SPRITE_MAX_SIZE, t);
             if (isStorm) baseSize *= STORM_SIZE_MULT;
 
-            // Turbulencia local: lon pequeña (la corriente principal ya es fuerte),
-            // lat simétrica grande → cada sprite deriva diferente en latitud, sin bandas
             float driftLon = Random.Range(-0.04f, 0.04f);
             float driftLat = Random.Range(-0.08f, 0.08f);
 
-            var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            go.name = isStorm ? "StormSprite" : "CloudSprite";
-            Destroy(go.GetComponent<MeshCollider>());
-            go.transform.localScale = Vector3.one * baseSize;
-
-            var rend = go.GetComponent<MeshRenderer>();
-            rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            rend.receiveShadows    = false;
-
-            var sprite = go.AddComponent<CloudSpriteInstance>();
+            sprite.transform.localScale = Vector3.one * baseSize;
             sprite.Init(tex, lat, lon, alpha, driftLon, driftLat, lifetime, isStorm, _cloudShader);
 
             _sprites.Add(sprite);
@@ -386,14 +370,96 @@ namespace FreightForwarder.Weather
             return ry * REGION_W + rx;
         }
 
+        // ── Mesh subdividida compartida ───────────────────────────────────────
+
+        private static Mesh GetCloudMesh()
+        {
+            if (_sharedCloudMesh != null) return _sharedCloudMesh;
+
+            // Grid NxN: suficientes vértices para que el shader curve la malla
+            // sobre la esfera sin artifacts visuales en nubes de hasta 380 unidades.
+            const int N = 10;
+            int vCount = (N + 1) * (N + 1);
+            var verts = new UnityEngine.Vector3[vCount];
+            var uvs   = new UnityEngine.Vector2[vCount];
+            var tris  = new int[N * N * 6];
+
+            for (int y = 0; y <= N; y++)
+            for (int x = 0; x <= N; x++)
+            {
+                int   idx = y * (N + 1) + x;
+                float u   = (float)x / N;
+                float v   = (float)y / N;
+                verts[idx] = new UnityEngine.Vector3(u - 0.5f, v - 0.5f, 0f);
+                uvs[idx]   = new UnityEngine.Vector2(u, v);
+            }
+
+            int ti = 0;
+            for (int y = 0; y < N; y++)
+            for (int x = 0; x < N; x++)
+            {
+                int bl = y * (N + 1) + x;
+                tris[ti++] = bl;     tris[ti++] = bl + N + 1; tris[ti++] = bl + 1;
+                tris[ti++] = bl + 1; tris[ti++] = bl + N + 1; tris[ti++] = bl + N + 2;
+            }
+
+            _sharedCloudMesh = new Mesh { name = "CloudQuad10x10" };
+            _sharedCloudMesh.vertices  = verts;
+            _sharedCloudMesh.uv        = uvs;
+            _sharedCloudMesh.triangles = tris;
+            _sharedCloudMesh.RecalculateNormals();
+            _sharedCloudMesh.RecalculateBounds();
+            return _sharedCloudMesh;
+        }
+
+        // ── Object Pool ──────────────────────────────────────────────────────
+
+        private void BuildPool()
+        {
+            _pool = new CloudSpriteInstance[MAX_SPRITES];
+            Mesh mesh = GetCloudMesh();
+            for (int i = 0; i < MAX_SPRITES; i++)
+            {
+                var go = new GameObject("CloudSprite_Pool");
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var r = go.AddComponent<MeshRenderer>();
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                r.receiveShadows    = false;
+                _pool[i] = go.AddComponent<CloudSpriteInstance>();
+                go.SetActive(false);
+            }
+        }
+
+        private CloudSpriteInstance Acquire(bool isStorm)
+        {
+            for (int i = 0; i < _pool.Length; i++)
+            {
+                if (!_pool[i].gameObject.activeSelf)
+                {
+                    _pool[i].gameObject.name = isStorm ? "StormSprite" : "CloudSprite";
+                    _pool[i].gameObject.SetActive(true);
+                    return _pool[i];
+                }
+            }
+            return null;
+        }
+
+        public void Release(CloudSpriteInstance sprite)
+        {
+            _sprites.Remove(sprite);
+            sprite.gameObject.SetActive(false);
+        }
+
         // ── Cleanup ───────────────────────────────────────────────────────────
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            foreach (var s in _sprites)
-                if (s != null) Destroy(s.gameObject);
             _sprites.Clear();
+            if (_pool == null) return;
+            foreach (var s in _pool)
+                if (s != null) Destroy(s.gameObject);
+            _pool = null;
         }
     }
 }

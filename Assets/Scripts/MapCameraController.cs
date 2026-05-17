@@ -284,16 +284,11 @@ public class MapCameraController : MonoBehaviour
         _manualLock = false;
         if (_lockAnchor != null) { Destroy(_lockAnchor); _lockAnchor = null; }
 
-        GameObject cityGo = GameObject.Find(cityName);
-        if (cityGo != null)
-        {
-            _followTarget = cityGo.transform;
-        }
-        else
-        {
+        _followTarget = CityMarker.TryGetMarker(cityName, out var marker)
+            ? marker.transform
+            : null;
+        if (_followTarget == null)
             Debug.LogWarning($"[Camera] Marcador '{cityName}' no encontrado, usando coordenadas.");
-            _followTarget = null;
-        }
 
         _followPermanent = true;
         _isFollowing     = true;
@@ -575,7 +570,8 @@ public class MapCameraController : MonoBehaviour
         ReleaseLockIfNeeded();
         if (_followRoutine != null) { StopCoroutine(_followRoutine); _followRoutine = null; }
 
-        GameObject baCity = GameObject.Find("Buenos Aires");
+        CityMarker.TryGetMarker("Buenos Aires", out var baCityMarker);
+        GameObject baCity = baCityMarker != null ? baCityMarker.gameObject : null;
         
         if (baCity != null && earthTransform != null)
         {

@@ -16,6 +16,8 @@ namespace FreightForwarder.Managers
         public event Action OnGameResumed;
         public event Action OnGameOver;
 
+        private bool _gameStarted;
+
         protected override void OnAwake()
         {
             CurrentState = GameState.MainMenu;
@@ -23,6 +25,8 @@ namespace FreightForwarder.Managers
 
         public void StartNewGame()
         {
+            if (_gameStarted) return;
+            _gameStarted = true;
             CurrentState = GameState.Playing;
             OnNewGameStarted?.Invoke();
             OnGameStateChanged?.Invoke(CurrentState);
