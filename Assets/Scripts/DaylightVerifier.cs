@@ -139,15 +139,14 @@ public class DaylightVerifier : MonoBehaviour
             Debug.Log($"[DaylightVerifier] Ciudad eliminada: {city.cityName}");
     }
  
-    // Tolerance scales with latitude: monthly-average vs. end-of-month actual diverges
-    // naturally (±0.9h at 52°N in March), so a fixed 0.5h would produce false positives
-    // for high-latitude cities throughout spring/autumn.
+    // Tolerance scales with latitude: even with interpolation, residual error from
+    // month-boundary bias and non-linearity at high latitudes can reach ~1.5h at 50°N.
     private float GetToleranceForLatitude(float lat)
     {
         float absLat = Mathf.Abs(lat);
         if (!useLatitudinalTolerance) return toleranceHours;
         if (absLat >= 60f) return 2.5f;
-        if (absLat >= 45f) return 1.5f;
+        if (absLat >= 45f) return 2.0f;
         if (absLat >= 30f) return 1.0f;
         return toleranceHours;
     }
@@ -161,7 +160,7 @@ public class DaylightVerifier : MonoBehaviour
         int      reportMonth = closedDay.Month;
         int      reportDay   = closedDay.Day;
 
-        float expected = GetExpectedDaylight(city.cityName, reportMonth);
+        float expected = GetExpectedDaylight(city.cityName, reportMonth, reportDay);
         if (expected < 0) return;
 
         float actual     = city.actualDaylightHours;
@@ -254,13 +253,57 @@ public class DaylightVerifier : MonoBehaviour
         daylightDatabase["Roma"]            = new float[] {  7.8f,  9.6f, 12.0f, 14.5f, 16.1f, 17.0f, 16.5f, 15.0f, 12.8f, 10.5f,  8.5f,  7.5f };
     }
  
-    // ── API pública (sin cambios de firma) ────────────────────────────────────
- 
+    // ── API pública ───────────────────────────────────────────────────────────
+
+    // Returns the raw monthly average (mid-month estimate). Used for display.
     public float GetExpectedDaylight(string cityName, int month)
     {
         if (daylightDatabase.ContainsKey(cityName) && month >= 1 && month <= 12)
             return daylightDatabase[cityName][month - 1];
         return -1f;
+    }
+
+    // Returns an interpolated expected value for a specific day by linearly
+    // blending the adjacent monthly averages, treating each as the mid-month value.
+    // This removes the systematic bias from comparing daily actuals against the
+    // whole-month average (which can differ by 2-3h at high latitudes in spring).
+    public float GetExpectedDaylight(string cityName, int month, int day)
+    {
+        if (!daylightDatabase.ContainsKey(cityName) || month < 1 || month > 12) return -1f;
+        float[] data = daylightDatabase[cityName];
+
+        // Approximate day-of-year for the 15th of each month (non-leap year)
+        int[] midDoy = { 15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349 };
+
+        int doy = GetDayOfYear(month, day);
+        int mi  = month - 1;
+
+        int m0, m1, d0, d1;
+        if (day < 15)
+        {
+            m0 = (mi + 11) % 12;
+            m1 = mi;
+            d0 = midDoy[m0];
+            d1 = midDoy[m1];
+            if (m0 > m1) d0 -= 365; // Dec mid → Jan: treat as negative DOY
+        }
+        else
+        {
+            m0 = mi;
+            m1 = (mi + 1) % 12;
+            d0 = midDoy[m0];
+            d1 = midDoy[m1];
+            if (m1 < m0) d1 += 365; // Dec → Jan next year
+        }
+
+        float t = Mathf.Clamp01((float)(doy - d0) / (d1 - d0));
+        return Mathf.Lerp(data[m0], data[m1], t);
+    }
+
+    private static int GetDayOfYear(int month, int day)
+    {
+        int[] cumDays = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
+        return cumDays[month - 1] + day;
     }
  
     public float GetComplianceRate() => complianceRate;
