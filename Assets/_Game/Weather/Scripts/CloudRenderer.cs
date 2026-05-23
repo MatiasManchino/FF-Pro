@@ -84,7 +84,9 @@ namespace FreightForwarder.Weather
             _cloudShader = Shader.Find("FF/CloudSprite");
             if (_cloudShader != null)
             {
+#if UNITY_EDITOR
                 Debug.Log("[CloudRenderer] Shader FF/CloudSprite OK.");
+#endif
                 return;
             }
 
@@ -122,9 +124,11 @@ namespace FreightForwarder.Weather
             _cloudTextures = list.ToArray();
             _hurricaneTex  = Resources.Load<Texture2D>("Map/Textures/Cloud/hurricane1");
 
+#if UNITY_EDITOR
             Debug.Log($"[CloudRenderer] Texturas: {_cloudTextures.Length} nubes, " +
                       $"huracán: {(_hurricaneTex != null ? "OK" : "FALTA")}. " +
                       $"Path base: 'Map/Textures/Cloud/XX'");
+#endif
         }
 
         // ── Ciclo continuo de spawn ───────────────────────────────────────────
@@ -268,9 +272,11 @@ namespace FreightForwarder.Weather
             }
 
             _refreshCount++;
+#if UNITY_EDITOR
             if (_refreshCount <= 3)
                 Debug.Log($"[CloudRenderer] Refresh #{_refreshCount}: {regionsAbove}/{REGION_W * REGION_H} regiones " +
                           $"nubladas, {_sprites.Count} sprites activos.");
+#endif
 
             // Gestión del huracán
             if (cycloneFound)
@@ -290,8 +296,10 @@ namespace FreightForwarder.Weather
         private void SpawnSprite(float centerLat, float centerLon, float cloudVal, bool isStorm)
         {
             if (_cloudShader == null || _cloudTextures.Length == 0 || _pool == null) return;
+#if UNITY_EDITOR
             if (_refreshCount <= 2)
                 Debug.Log($"[CloudRenderer] Spawneando sprite en ({centerLat:F0},{centerLon:F0}), storm={isStorm}");
+#endif
 
             var sprite = Acquire(isStorm);
             if (sprite == null) return; // pool agotado
