@@ -22,8 +22,8 @@ public class DaylightVerifier : MonoBehaviour
     public float toleranceHours = 0.5f;
  
     [Tooltip("Mostrar mensajes de depuración en consola.")]
-    public bool showDebugInfo = false;
- 
+    public bool showDebugInfo = true;
+
     [Tooltip("Mostrar también los días que pasan la verificación (no solo las violaciones).")]
     public bool showAllChecks = false;
  
@@ -83,6 +83,8 @@ public class DaylightVerifier : MonoBehaviour
                   $"Tolerancia: ±{toleranceHours}h");
     }
  
+    private int _dayCount;
+
     // Update intencionalmente VACÍO. La verificación previa aquí (cuando
     // dayProgress > 0.995) duplicaba los reportes de HandleNewDay con valores
     // ligeramente distintos. Toda verificación pasa por el evento OnNewDay.
@@ -108,6 +110,10 @@ public class DaylightVerifier : MonoBehaviour
             if (!city.HasCompletedFirstDay()) continue;
             VerifyCityDaylight(city);
         }
+
+        _dayCount++;
+        if (showDebugInfo && _dayCount % 7 == 0)
+            Debug.Log($"[DaylightVerifier] Día {_dayCount} — {GetStatistics()}");
     }
  
     public void RegisterCity(CityMarker city)
@@ -283,11 +289,35 @@ public class DaylightVerifier : MonoBehaviour
     public void ResetVerifier()
     {
         firstDayEventReceived = false;
+        _dayCount = 0;
         ClearViolations();
         if (showDebugInfo)
             Debug.Log("[DaylightVerifier] Estado reiniciado para nueva simulación.");
     }
- 
+
+    [ContextMenu("Imprimir Reporte Completo")]
+    public void PrintReport()
+    {
+        Debug.Log("[DaylightVerifier] " + GetStatistics());
+        Debug.Log(ExportViolationsReport());
+    }
+
+    [ContextMenu("Imprimir Estado Actual de Ciudades")]
+    public void PrintCurrentCityState()
+    {
+        if (registeredCities.Count == 0) { Debug.Log("[DaylightVerifier] No hay ciudades registradas."); return; }
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"[DaylightVerifier] Estado actual — {registeredCities.Count} ciudades:");
+        foreach (var city in registeredCities)
+        {
+            int month = TimeManager.Instance != null ? TimeManager.Instance.CurrentUtcTime.Month : 1;
+            float expected = GetExpectedDaylight(city.cityName, month);
+            sb.AppendLine($"  {city.cityName,-20} | Ahora: {(city.isInDaylight ? "DÍA ☀" : "NOCHE ☾")} | " +
+                          $"Acum hoy: {city.actualDaylightHours:F1}h | Esp (mes {month}): {(expected >= 0 ? expected + "h" : "sin datos")}");
+        }
+        Debug.Log(sb.ToString());
+    }
+
     void OnDestroy()
     {
         if (TimeManager.Instance != null)
