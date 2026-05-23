@@ -201,7 +201,7 @@ public class CityMarker : MonoBehaviour
     void UpdateExpectedDaylight()
     {
         if (verifier != null && !string.IsNullOrEmpty(cityName))
-        { int m = TimeManager.Instance.CurrentUtcTime.Month; float e = verifier.GetExpectedDaylight(cityName, m); if (e >= 0f) expectedDaylightHours = e; }
+        { int m = TimeManager.Instance.CurrentUtcTime.Month; expectedDaylightHours = DaylightVerifier.ComputeAstronomicalDaylight(latitude, m, 15); }
     }
 
     void UpdateDaylightColor()
