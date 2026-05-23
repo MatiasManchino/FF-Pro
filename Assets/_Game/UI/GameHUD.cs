@@ -2,16 +2,12 @@ using FreightForwarder.Managers;
 using FreightForwarder.Models;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FreightForwarder.UI
 {
-    /// <summary>
-    /// HUD permanente del juego. Se dibuja en la esquina superior izquierda
-    /// sin interferir con la UI del mapa (botones de velocidad al centro, etc.)
-    /// </summary>
     public class GameHUD : MonoBehaviour
     {
-        // ── Notificaciones ────────────────────────────────────────────────────
         private class Notification
         {
             public string Text;
@@ -21,43 +17,34 @@ namespace FreightForwarder.UI
 
         private readonly List<Notification> _notifications = new List<Notification>();
         private const float NOTIF_DURATION = 4f;
-        private const float NOTIF_H        = 22f;
+        private const int   MAX_NOTIFS     = 5;
 
-        // ── Styles ────────────────────────────────────────────────────────────
-        private GUIStyle _panel, _money, _stat, _small, _bar, _notifStyle;
-        private Texture2D _barBg, _barFill, _barRep, _barXP;
-        private bool _ready;
+        // UGUI refs
+        private Text  _moneyText;
+        private Text  _repLabel;
+        private Image _repFill;
+        private Text  _xpLabel;
+        private Image _xpFill;
+        private Text  _dateText;
+        private Text  _cargoText;
+        private readonly List<Text> _notifTexts = new List<Text>();
+        private bool _dirty = true;
+        private int  _lastDay = -1;
 
-        // ── Layout ────────────────────────────────────────────────────────────
-        private const float X  = 68f;   // deja espacio al sidebar izquierdo
-        private const float Y  = 46f;   // deja espacio al top bar
-        private const float W  = 210f;
+        private static Font _fontCache;
+        private static Font _font => _fontCache != null
+            ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
 
-        // ─────────────────────────────────────────────────────────────────────
+        // Layout constants matching old IMGUI positions
+        private const float PANEL_X = 68f;
+        private const float PANEL_Y = 46f;
+        private const float PANEL_W = 214f;
+        private const float PANEL_H = 110f;
 
-        private void Start()
-        {
-            if (EconomyManager.Instance != null)
-            {
-                EconomyManager.Instance.OnMoneyChanged     += OnMoneyChanged;
-                EconomyManager.Instance.OnReputationChanged += OnRepChanged;
-                EconomyManager.Instance.OnLevelUp          += OnLevelUp;
-            }
-            if (GameManager.Instance != null)
-            {
-                GameManager.Instance.OnGameOver += OnGameOver;
-            }
-            if (CargoManager.Instance != null)
-            {
-                CargoManager.Instance.OnCargoCompleted += OnCargoCompleted;
-                CargoManager.Instance.OnCargoFailed    += OnCargoFailed;
-                CargoManager.Instance.OnCargoExpired   += OnCargoExpired;
-            }
-            if (EventManager.Instance != null)
-            {
-                EventManager.Instance.OnEventTriggered += OnEventTriggered;
-            }
-        }
+        // ── Lifecycle ─────────────────────────────────────────────────────────
+
+        private void Awake()  => BuildUI();
+        private void Start()  => SubscribeEvents();
 
         private void OnDestroy()
         {
@@ -68,9 +55,7 @@ namespace FreightForwarder.UI
                 EconomyManager.Instance.OnLevelUp           -= OnLevelUp;
             }
             if (GameManager.Instance != null)
-            {
                 GameManager.Instance.OnGameOver -= OnGameOver;
-            }
             if (CargoManager.Instance != null)
             {
                 CargoManager.Instance.OnCargoCompleted -= OnCargoCompleted;
@@ -78,210 +63,277 @@ namespace FreightForwarder.UI
                 CargoManager.Instance.OnCargoExpired   -= OnCargoExpired;
             }
             if (EventManager.Instance != null)
-            {
                 EventManager.Instance.OnEventTriggered -= OnEventTriggered;
-            }
         }
 
         private void Update()
         {
+            bool anyAlive = false;
             for (int i = _notifications.Count - 1; i >= 0; i--)
             {
                 _notifications[i].TimeLeft -= Time.deltaTime;
-                if (_notifications[i].TimeLeft <= 0f)
-                    _notifications.Remove(_notifications[i]);
+                if (_notifications[i].TimeLeft <= 0f) _notifications.RemoveAt(i);
+                else anyAlive = true;
+            }
+
+            int today = FFTimeManager.Instance?.CurrentDay ?? 0;
+            if (today != _lastDay) { _lastDay = today; _dirty = true; }
+
+            if (_dirty || anyAlive)
+            {
+                RefreshDisplay();
+                _dirty = false;
             }
         }
 
-        // ── OnGUI ─────────────────────────────────────────────────────────────
-        private void OnGUI()
+        // ── UI construction ───────────────────────────────────────────────────
+
+        private void BuildUI()
         {
-            if (EconomyManager.Instance == null) return;
-            EnsureStyles();
-            DrawHUD();
-            DrawNotifications();
+            var canvasRT = GetOrCreateCanvas();
+
+            // HUD panel — top-left, matching old IMGUI offset
+            var panel = MakeRect("HUDPanel", canvasRT,
+                new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+                new Vector2(PANEL_X, -PANEL_Y), new Vector2(PANEL_W, PANEL_H));
+            MakeImage(panel, new Color(0f, 0.04f, 0.08f, 0.88f));
+
+            float y = -4f;
+
+            _moneyText = MakeText("Money", panel, new Vector2(4, y), new Vector2(PANEL_W - 8, 26),
+                "$0", 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+            y -= 28f;
+
+            _repLabel = MakeText("RepLabel", panel, new Vector2(4, y), new Vector2(80, 16),
+                "Rep 0/100", 11, FontStyle.Normal, new Color(0.8f, 0.8f, 0.8f), TextAnchor.MiddleLeft);
+            _repFill = MakeBar("RepBar", panel, new Vector2(86, y - 2), new Vector2(PANEL_W - 94, 12));
+            y -= 18f;
+
+            _xpLabel = MakeText("XPLabel", panel, new Vector2(4, y), new Vector2(80, 16),
+                "Nv.1  XP", 11, FontStyle.Normal, new Color(0.8f, 0.8f, 0.8f), TextAnchor.MiddleLeft);
+            _xpFill = MakeBar("XPBar", panel, new Vector2(86, y - 2), new Vector2(PANEL_W - 94, 12));
+            y -= 18f;
+
+            _dateText = MakeText("Date", panel, new Vector2(4, y), new Vector2(PANEL_W - 8, 16),
+                "Día 0  ·  --/--/----", 11, FontStyle.Normal, new Color(0.8f, 0.8f, 0.8f), TextAnchor.MiddleLeft);
+            y -= 18f;
+
+            _cargoText = MakeText("CargoStats", panel, new Vector2(4, y), new Vector2(PANEL_W - 8, 16),
+                "Mercado: 0   Tránsito: 0", 11, FontStyle.Normal, new Color(0.7f, 0.7f, 0.7f), TextAnchor.MiddleLeft);
+
+            // Notification container directly below the panel
+            var notifRT = MakeRect("HUDNotifications", canvasRT,
+                new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+                new Vector2(PANEL_X, -(PANEL_Y + PANEL_H + 4f)),
+                new Vector2(PANEL_W + 80f, MAX_NOTIFS * 24f));
+
+            for (int i = 0; i < MAX_NOTIFS; i++)
+            {
+                var nt = MakeText($"Notif_{i}", notifRT,
+                    new Vector2(0, -i * 24f), new Vector2(PANEL_W + 80f, 22f),
+                    "", 12, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+                _notifTexts.Add(nt);
+            }
         }
 
-        private void DrawHUD()
+        private void RefreshDisplay()
         {
+            if (_moneyText == null) return;
+
             var eco  = EconomyManager.Instance;
             var time = FFTimeManager.Instance;
             var carg = CargoManager.Instance;
 
-            // Fondo del panel
-            float h = 120f;
-            GUI.Box(new Rect(X - 2, Y - 2, W + 4, h + 4), GUIContent.none, _panel);
+            if (eco != null)
+            {
+                _moneyText.text  = eco.Money >= 0
+                    ? $"💰  ${eco.Money:N0}"
+                    : $"💰  -${Mathf.Abs(eco.Money):N0}";
+                _moneyText.color = eco.Money >= 0
+                    ? new Color(0.2f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);
 
-            float y = Y + 4f;
-
-            // ── Dinero ──
-            string moneyStr = eco.Money >= 0
-                ? $"${eco.Money:N0}"
-                : $"-${Mathf.Abs(eco.Money):N0}";
-            Color moneyCol = eco.Money >= 0 ? new Color(0.2f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);
-
-            var prevC = GUI.contentColor;
-            GUI.contentColor = moneyCol;
-            GUI.Label(new Rect(X + 4, y, W - 8, 26f), $"💰  {moneyStr}", _money);
-            GUI.contentColor = prevC;
-            y += 28f;
-
-            // ── Reputación ──
-            GUI.Label(new Rect(X + 4, y, 80f, 16f), $"Rep  {eco.Reputation}/100", _small);
-            DrawBar(new Rect(X + 86, y + 2, W - 94, 12f),
-                    eco.Reputation / 100f,
+                _repLabel.text = $"Rep  {eco.Reputation}/100";
+                SetBar(_repFill, eco.Reputation / 100f,
                     eco.Reputation > 50 ? new Color(0.2f, 0.8f, 0.3f) :
                     eco.Reputation > 25 ? new Color(0.9f, 0.7f, 0.1f) :
                                           new Color(0.9f, 0.2f, 0.2f));
-            y += 18f;
 
-            // ── Nivel + XP ──
-            int xpNeeded = eco.GetXPForNextLevel();
-            float xpPct  = xpNeeded > 0 ? (float)eco.CurrentXP / xpNeeded : 0f;
-            GUI.Label(new Rect(X + 4, y, 80f, 16f), $"Nv.{eco.Level}  XP", _small);
-            DrawBar(new Rect(X + 86, y + 2, W - 94, 12f),
-                    xpPct, new Color(0.3f, 0.5f, 1f));
-            y += 18f;
-
-            // ── Día + cargas activas ──
-            int day       = time?.CurrentDay ?? 0;
-            string date   = time?.GetFormattedDate() ?? "--/--/----";
-            int enTransito = carg?.ActiveCargos.Count ?? 0;
-            int enMercado  = carg?.MarketCargos.Count ?? 0;
-
-            GUI.Label(new Rect(X + 4, y, W - 8, 16f),
-                      $"Día {day}  ·  {date}", _small);
-            y += 18f;
-
-            GUI.contentColor = new Color(0.7f, 0.7f, 0.7f);
-            GUI.Label(new Rect(X + 4, y, W - 8, 16f),
-                      $"Mercado: {enMercado}   Tránsito: {enTransito}", _small);
-            GUI.contentColor = Color.white;
-        }
-
-        // ── Barra de progreso ─────────────────────────────────────────────────
-        private void DrawBar(Rect r, float fill, Color fillColor)
-        {
-            // Fondo
-            var prev = GUI.color;
-            GUI.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-
-            // Relleno
-            float filled = Mathf.Clamp01(fill) * r.width;
-            if (filled > 1f)
-            {
-                GUI.color = fillColor;
-                GUI.DrawTexture(new Rect(r.x, r.y, filled, r.height), Texture2D.whiteTexture);
+                int   xpNeeded = eco.GetXPForNextLevel();
+                float xpPct    = xpNeeded > 0 ? (float)eco.CurrentXP / xpNeeded : 0f;
+                _xpLabel.text  = $"Nv.{eco.Level}  XP";
+                SetBar(_xpFill, xpPct, new Color(0.3f, 0.5f, 1f));
             }
-            GUI.color = prev;
-        }
 
-        // ── Notificaciones ────────────────────────────────────────────────────
-        private void DrawNotifications()
-        {
-            float startY = Y + 130f;
-            for (int i = 0; i < _notifications.Count && i < 5; i++)
+            _dateText.text  = $"Día {time?.CurrentDay ?? 0}  ·  {time?.GetFormattedDate() ?? "--/--/----"}";
+            _cargoText.text = $"Mercado: {carg?.MarketCargos.Count ?? 0}   Tránsito: {carg?.ActiveCargos.Count ?? 0}";
+
+            for (int i = 0; i < MAX_NOTIFS; i++)
             {
-                var n     = _notifications[i];
-                float alpha = Mathf.Clamp01(n.TimeLeft / 1.2f);
-                var prevC = GUI.contentColor;
-                GUI.contentColor = new Color(n.Color.r, n.Color.g, n.Color.b, alpha);
-                GUI.Label(new Rect(X, startY + i * (NOTIF_H + 2f), W + 80f, NOTIF_H),
-                          n.Text, _notifStyle);
-                GUI.contentColor = prevC;
+                if (i < _notifications.Count)
+                {
+                    var n     = _notifications[i];
+                    float a   = Mathf.Clamp01(n.TimeLeft / 1.2f);
+                    _notifTexts[i].text  = n.Text;
+                    _notifTexts[i].color = new Color(n.Color.r, n.Color.g, n.Color.b, a);
+                }
+                else
+                {
+                    _notifTexts[i].text = "";
+                }
             }
         }
+
+        // ── Notifications ─────────────────────────────────────────────────────
 
         private void AddNotification(string text, Color color)
         {
-            _notifications.Insert(0, new Notification
+            _notifications.Insert(0, new Notification { Text = text, Color = color, TimeLeft = NOTIF_DURATION });
+            if (_notifications.Count > MAX_NOTIFS) _notifications.RemoveAt(MAX_NOTIFS);
+        }
+
+        // ── Event subscriptions ───────────────────────────────────────────────
+
+        private void SubscribeEvents()
+        {
+            if (EconomyManager.Instance != null)
             {
-                Text = text, Color = color, TimeLeft = NOTIF_DURATION
-            });
-            if (_notifications.Count > 5)
-                _notifications.RemoveAt(5);
+                EconomyManager.Instance.OnMoneyChanged      += OnMoneyChanged;
+                EconomyManager.Instance.OnReputationChanged += OnRepChanged;
+                EconomyManager.Instance.OnLevelUp           += OnLevelUp;
+            }
+            if (GameManager.Instance != null)
+                GameManager.Instance.OnGameOver += OnGameOver;
+            if (CargoManager.Instance != null)
+            {
+                CargoManager.Instance.OnCargoCompleted += OnCargoCompleted;
+                CargoManager.Instance.OnCargoFailed    += OnCargoFailed;
+                CargoManager.Instance.OnCargoExpired   += OnCargoExpired;
+            }
+            if (EventManager.Instance != null)
+                EventManager.Instance.OnEventTriggered += OnEventTriggered;
         }
 
-        // ── Callbacks de eventos ──────────────────────────────────────────────
-        private void OnMoneyChanged(int value)
+        private void OnMoneyChanged(int v) { _dirty = true; }
+        private void OnRepChanged(int v)   { _dirty = true; if (v <= 20) AddNotification($"⚠️  Reputación crítica: {v}/100", new Color(1f, 0.3f, 0.2f)); }
+        private void OnLevelUp(int l)      { _dirty = true; AddNotification($"⭐  ¡Subiste al Nivel {l}!  +${l * 100:N0}", Color.yellow); }
+        private void OnGameOver()          { AddNotification("💀  GAME OVER", new Color(1f, 0.2f, 0.2f)); }
+
+        private void OnCargoCompleted(Cargo c)
+            { _dirty = true; AddNotification($"✅  {Route(c)}  +${c.FinalPrice - c.AgentCost:N0}", new Color(0.2f, 0.9f, 0.4f)); }
+        private void OnCargoFailed(Cargo c)
+            { _dirty = true; AddNotification($"❌  Falló: {Route(c)}", new Color(1f, 0.4f, 0.2f)); }
+        private void OnCargoExpired(Cargo c)
+            { _dirty = true; AddNotification($"⏰  Expiró: {Route(c)}", new Color(0.8f, 0.6f, 0.2f)); }
+        private void OnEventTriggered(GameEvent e, Cargo c)
+            => AddNotification($"⚠️  {e.Name}  [{Route(c)}]", new Color(1f, 0.6f, 0.1f));
+
+        private static string Route(Cargo c)
+            => $"{c.OriginCityId.Replace('_', ' ')} → {c.DestinationCityId.Replace('_', ' ')}";
+
+        // ── UGUI factory helpers ──────────────────────────────────────────────
+
+        private static RectTransform GetOrCreateCanvas()
         {
-            // Solo notificar cambios grandes
+            if (UnityEngine.Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+            {
+                var es = new GameObject("EventSystem");
+                es.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                es.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            }
+
+            var existing = UnityEngine.Object.FindAnyObjectByType<Canvas>();
+            if (existing != null)
+            {
+                if (existing.GetComponent<GraphicRaycaster>() == null)
+                    existing.gameObject.AddComponent<GraphicRaycaster>();
+                var existCs = existing.GetComponent<CanvasScaler>();
+                if (existCs != null)
+                {
+                    existCs.uiScaleMode        = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                    existCs.referenceResolution = new Vector2(1280, 720);
+                    existCs.matchWidthOrHeight  = 0.5f;
+                }
+                existing.sortingOrder = 10;
+                return existing.GetComponent<RectTransform>();
+            }
+
+            var cgo = new GameObject("UICanvas");
+            var c   = cgo.AddComponent<Canvas>();
+            c.renderMode   = RenderMode.ScreenSpaceOverlay;
+            c.sortingOrder = 10;
+
+            var cs = cgo.AddComponent<CanvasScaler>();
+            cs.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            cs.referenceResolution = new Vector2(1280, 720);
+            cs.matchWidthOrHeight  = 0.5f;
+
+            cgo.AddComponent<GraphicRaycaster>();
+            return cgo.GetComponent<RectTransform>();
         }
 
-        private void OnRepChanged(int value)
+        private static RectTransform MakeRect(string name, RectTransform parent,
+            Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+            Vector2 anchoredPos, Vector2 size)
         {
-            if (value <= 20)
-                AddNotification($"⚠️  Reputación crítica: {value}/100", new Color(1f, 0.3f, 0.2f));
+            var go = new GameObject(name);
+            var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            rt.anchorMin        = anchorMin;
+            rt.anchorMax        = anchorMax;
+            rt.pivot            = pivot;
+            rt.anchoredPosition = anchoredPos;
+            rt.sizeDelta        = size;
+            return rt;
         }
 
-        private void OnLevelUp(int level)
+        private static Image MakeImage(RectTransform rt, Color color)
         {
-            AddNotification($"⭐  ¡Subiste al Nivel {level}!  +${level * 100:N0}", Color.yellow);
+            var img = rt.gameObject.AddComponent<Image>();
+            img.color = color;
+            return img;
         }
 
-        private void OnGameOver()
+        private static Text MakeText(string name, RectTransform parent,
+            Vector2 offset, Vector2 size, string text,
+            int fontSize, FontStyle style, Color color, TextAnchor anchor)
         {
-            AddNotification("💀  GAME OVER", new Color(1f, 0.2f, 0.2f));
-        }
-
-        private void OnCargoCompleted(Cargo cargo)
-        {
-            int profit = cargo.FinalPrice - cargo.AgentCost;
-            AddNotification($"✅  {cargo.OriginCityId.Replace('_', ' ')} → {cargo.DestinationCityId.Replace('_', ' ')}  +${profit:N0}",
-                            new Color(0.2f, 0.9f, 0.4f));
-        }
-
-        private void OnCargoFailed(Cargo cargo)
-        {
-            AddNotification($"❌  Falló: {cargo.OriginCityId.Replace('_', ' ')} → {cargo.DestinationCityId.Replace('_', ' ')}",
-                            new Color(1f, 0.4f, 0.2f));
-        }
-
-        private void OnCargoExpired(Cargo cargo)
-        {
-            AddNotification($"⏰  Expiró sin cotizar: {cargo.OriginCityId.Replace('_', ' ')} → {cargo.DestinationCityId.Replace('_', ' ')}",
-                            new Color(0.8f, 0.6f, 0.2f));
-        }
-
-        private void OnEventTriggered(GameEvent evt, Cargo cargo)
-        {
-            string route = $"{cargo.OriginCityId.Replace('_', ' ')} → {cargo.DestinationCityId.Replace('_', ' ')}";
-            AddNotification($"⚠️  {evt.Name}  [{route}]", new Color(1f, 0.6f, 0.1f));
-        }
-
-        // ── Styles ────────────────────────────────────────────────────────────
-        private void EnsureStyles()
-        {
-            if (_ready) return;
-            _ready = true;
-
-            _panel = new GUIStyle(GUI.skin.box);
-            _panel.normal.background = MakeTex(new Color(0f, 0.04f, 0.08f, 0.88f));
-
-            _money = new GUIStyle(GUI.skin.label)
-                { fontSize = 18, fontStyle = FontStyle.Bold };
-            _money.normal.textColor = Color.white;
-
-            _stat = new GUIStyle(GUI.skin.label)
-                { fontSize = 13, fontStyle = FontStyle.Bold };
-            _stat.normal.textColor = Color.white;
-
-            _small = new GUIStyle(GUI.skin.label)
-                { fontSize = 11 };
-            _small.normal.textColor = new Color(0.8f, 0.8f, 0.8f);
-
-            _notifStyle = new GUIStyle(GUI.skin.label)
-                { fontSize = 12, fontStyle = FontStyle.Bold };
-            _notifStyle.normal.textColor = Color.white;
-        }
-
-        private static Texture2D MakeTex(Color col)
-        {
-            var t = new Texture2D(2, 2);
-            t.SetPixels(new[] { col, col, col, col });
-            t.Apply();
+            var rt = MakeRect(name, parent,
+                new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+                offset, size);
+            var t = rt.gameObject.AddComponent<Text>();
+            t.text      = text;
+            t.fontSize  = fontSize;
+            t.fontStyle = style;
+            t.color     = color;
+            t.alignment = anchor;
+            t.font      = _font;
             return t;
+        }
+
+        private static Image MakeBar(string name, RectTransform parent, Vector2 offset, Vector2 size)
+        {
+            // Background
+            var bgRT = MakeRect(name + "_BG", parent,
+                new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+                offset, size);
+            bgRT.gameObject.AddComponent<Image>().color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
+
+            // Fill — uses Image.Filled so fillAmount drives the bar width
+            var fillRT = MakeRect(name + "_Fill", bgRT,
+                Vector2.zero, Vector2.one, new Vector2(0, 0.5f),
+                Vector2.zero, Vector2.zero);
+            var fill = fillRT.gameObject.AddComponent<Image>();
+            fill.type        = Image.Type.Filled;
+            fill.fillMethod  = Image.FillMethod.Horizontal;
+            fill.fillOrigin  = 0;
+            fill.fillAmount  = 0f;
+            return fill;
+        }
+
+        private static void SetBar(Image fill, float amount, Color color)
+        {
+            fill.fillAmount = Mathf.Clamp01(amount);
+            fill.color      = color;
         }
     }
 }

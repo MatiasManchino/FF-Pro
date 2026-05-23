@@ -10,8 +10,6 @@ namespace FreightForwarder.Weather
     /// </summary>
     public class WeatherManager : Singleton<WeatherManager>
     {
-        public event Action<float, float> OnStormStarted;   // lat, lon
-        public event Action<float, float> OnCycloneStarted; // lat, lon
 
         // Returns the cell at a geographic coordinate (safe: returns empty cell if system not ready)
         public WeatherCell GetCellAt(float lat, float lon)

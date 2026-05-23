@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using FreightForwarder.Managers;
 using FreightForwarder.Map;
@@ -5,47 +6,86 @@ using FreightForwarder.Models;
 using FreightForwarder.Utils;
 using static FreightForwarder.Models.Constants;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FreightForwarder.UI
 {
-    /// <summary>
-    /// UI principal: TOP BAR siempre visible + sidebar de navegación + paneles.
-    /// Layout: TOP BAR (full width) / SIDEBAR (izquierda) / CONTENT (derecha).
-    /// </summary>
     public class FFUIManager : Singleton<FFUIManager>
     {
-        // ── Paneles ───────────────────────────────────────────────────────────
-        private enum Panel { None, Market, ActiveCargos, Agents, Clients, Finances, Offices, Events }
-        private Panel   _active = Panel.None;
-        private Vector2 _scroll;
+        private enum Panel { None = 0, Market, ActiveCargos, Agents, Clients, Finances, Offices, Events }
+        private Panel _active = Panel.None;
+        private bool  _menuOpen;
 
-        // ── Menú y referencias de mapa ───────────────────────────────────────
-        private bool _menuOpen;
         private MapCameraController _camController;
+        private MarketPanel         _marketPanel;
 
-        // ── Log de eventos ────────────────────────────────────────────────────
         private struct EventLog { public string Text; public Color Color; public int Day; }
         private readonly List<EventLog> _eventLog = new List<EventLog>();
         private const int MAX_EVENT_LOG = 30;
 
-        // ── Referencias ───────────────────────────────────────────────────────
-        private MarketPanel _marketPanel;
-
         // ── Layout ────────────────────────────────────────────────────────────
-        public  const float SIDEBAR_W = 62f;
-        private const float TOP_H     = 38f;
-        private const float TICKER_H  = 28f;
-        private const float BTN_H     = 48f;
-        private const float PANEL_X   = SIDEBAR_W + 6f;
-        private const float PANEL_Y   = TOP_H + 8f;
-        private const float PANEL_W   = 340f;
+        public  const float SIDEBAR_W  = 62f;
+        private const float TOP_H      = 38f;
+        private const float TICKER_H   = 28f;
+        private const float BTN_H      = 48f;
+        private const float PANEL_X    = SIDEBAR_W + 6f;
+        private const float PANEL_Y    = TOP_H + 8f;
+        private const float PANEL_W    = 340f;
+        private const float PANEL_MAX_H = 620f;
 
-        // ── Styles ────────────────────────────────────────────────────────────
-        private GUIStyle _navBtn, _navBtnOn, _topBtn, _topBtnOn;
-        private GUIStyle _box, _title, _lbl, _small, _logoStyle, _badgeStyle;
-        private bool _ready;
+        // ── Colors ────────────────────────────────────────────────────────────
+        private static readonly Color C_BG_DARK  = new Color(0f, 0.03f, 0.08f, 0.97f);
+        private static readonly Color C_BG_PANEL = new Color(0f, 0.04f, 0.10f, 0.96f);
+        private static readonly Color C_BTN_OFF  = new Color(0.10f, 0.12f, 0.15f, 0.92f);
+        private static readonly Color C_BTN_ON   = new Color(0.10f, 0.35f, 0.80f, 0.95f);
+        private static readonly Color C_ACCENT   = new Color(0.20f, 0.50f, 1.00f, 0.50f);
+        private static readonly Color C_GREY     = new Color(0.75f, 0.75f, 0.75f, 1.00f);
 
-        // ── Init ──────────────────────────────────────────────────────────────
+        // ── UGUI refs ─────────────────────────────────────────────────────────
+        private Text    _moneyText, _repText, _dateText;
+        private Image[] _speedBgs;
+        private Image   _menuBg, _lockBg;
+        private GameObject _menuPopupGO;
+
+        private Image[]    _navBgs;
+        private Text       _badgeText;
+        private GameObject _badgeGO;
+
+        private static readonly Panel[] SIDE_PANELS = {
+            Panel.Market, Panel.ActiveCargos, Panel.Agents,
+            Panel.Clients, Panel.Finances, Panel.Offices, Panel.Events
+        };
+        private static readonly Panel[] CONTENT_PANELS = {
+            Panel.ActiveCargos, Panel.Agents, Panel.Clients,
+            Panel.Finances, Panel.Offices, Panel.Events
+        };
+        private GameObject[]    _panelGOs;
+        private RectTransform[] _scrollContents;
+        private Text[]          _panelHeaders;
+
+        // Finances fixed refs
+        private Text  _finMoney, _finRep, _finLevel, _finStats;
+        private Image _finRepFill, _finXpFill;
+
+        private static Font _fontCache;
+        private static Font _font => _fontCache != null ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
+
+        // ── TopBar dirty-check cache ──────────────────────────────────────────
+        private int  _tbMoney    = int.MinValue;
+        private int  _tbRep      = int.MinValue;
+        private int  _tbDay      = -1;
+        private int  _tbSpeed    = -1;
+        private bool _tbLocked   = false;
+        private bool _tbMenu     = false;
+
+        // Stored delegates so lambdas can be unsubscribed from EconomyManager events
+        private Action<int> _onMoneyChanged;
+        private Action<int> _onRepChanged;
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────
+
+        protected override void OnAwake() { BuildUI(); }
+
         private void Start()
         {
             _marketPanel   = FindAnyObjectByType<MarketPanel>();
@@ -53,6 +93,15 @@ namespace FreightForwarder.UI
 
             if (EventManager.Instance != null)
                 EventManager.Instance.OnEventTriggered += OnEventTriggered;
+            if (FFTimeManager.Instance != null)
+                FFTimeManager.Instance.OnDayPassed += OnDayPassed;
+            if (EconomyManager.Instance != null)
+            {
+                _onMoneyChanged = _ => RefreshFinancesIfVisible();
+                _onRepChanged   = _ => RefreshFinancesIfVisible();
+                EconomyManager.Instance.OnMoneyChanged      += _onMoneyChanged;
+                EconomyManager.Instance.OnReputationChanged += _onRepChanged;
+            }
         }
 
         protected override void OnDestroy()
@@ -60,549 +109,565 @@ namespace FreightForwarder.UI
             base.OnDestroy();
             if (EventManager.Instance != null)
                 EventManager.Instance.OnEventTriggered -= OnEventTriggered;
+            if (FFTimeManager.Instance != null)
+                FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
+            if (EconomyManager.Instance != null)
+            {
+                EconomyManager.Instance.OnMoneyChanged      -= _onMoneyChanged;
+                EconomyManager.Instance.OnReputationChanged -= _onRepChanged;
+            }
         }
 
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                if (_menuOpen)          _menuOpen = false;
+                if (_menuOpen) ToggleMenu();
                 else if (_active != Panel.None) SetPanel(Panel.None);
             }
+            RefreshTopBar();
         }
 
-        // ── OnGUI ─────────────────────────────────────────────────────────────
-        private void OnGUI()
+        // ── Build UI ──────────────────────────────────────────────────────────
+
+        private void BuildUI()
         {
-            EnsureStyles();
-            DrawTopBar();
-            DrawSidebar();
-            DrawCurrentPanel();
+            var canvas = GetOrCreateCanvas();
+            BuildTopBar(canvas);
+            BuildSidebar(canvas);
+            BuildPanels(canvas);
+            BuildMenuPopup(canvas);
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // TOP BAR — siempre visible
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawTopBar()
+        private void BuildTopBar(RectTransform c)
         {
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0.03f, 0.08f, 0.97f);
-            GUI.DrawTexture(new Rect(0, 0, Screen.width, TOP_H), Texture2D.whiteTexture);
-            GUI.color = new Color(0.2f, 0.5f, 1f, 0.5f);
-            GUI.DrawTexture(new Rect(0, TOP_H - 1f, Screen.width, 1f), Texture2D.whiteTexture);
-            GUI.color = prev;
+            var bar = MakeRect("TopBar", c,
+                new Vector2(0,1), new Vector2(1,1), new Vector2(0,1), Vector2.zero, new Vector2(0, TOP_H));
+            MakeImg(bar, C_BG_DARK);
+            var acc = MakeRect("TopAccent", bar,
+                new Vector2(0,0), new Vector2(1,0), new Vector2(0,1), Vector2.zero, new Vector2(0, 1f));
+            MakeImg(acc, C_ACCENT);
 
-            float y  = 4f;
-            float bH = TOP_H - 8f;
-            float x  = SIDEBAR_W + 8f;
+            float ly = -(TOP_H * 0.5f);
+            float lh = TOP_H - 8f;
+            _moneyText = MakeTxtPos("Money", bar, new Vector2(SIDEBAR_W+8f, ly), new Vector2(150f, lh),
+                "$0", 12, FontStyle.Bold, new Color(0.2f,1f,0.4f), TextAnchor.MiddleLeft);
+            _repText   = MakeTxtPos("Rep", bar, new Vector2(SIDEBAR_W+164f, ly), new Vector2(110f, lh),
+                "⭐ 50", 12, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+            _dateText  = MakeTxtPos("Date", bar, new Vector2(SIDEBAR_W+280f, ly), new Vector2(240f, lh),
+                "Día 0", 11, FontStyle.Normal, C_GREY, TextAnchor.MiddleLeft);
 
-            if (EconomyManager.Instance != null)
+            float bh = TOP_H - 8f;
+            float by = -(TOP_H * 0.5f);
+            float rx = -8f;
+
+            (_menuBg, _) = MakeTopBtn("MenuBtn", bar, rx, by, 64f, bh, "☰ Menú", ToggleMenu);
+            rx -= 70f;
+            MakeVSep(bar, rx, by, bh); rx -= 8f;
+            (_lockBg, _) = MakeTopBtn("LockBtn", bar, rx, by, 52f, bh, "FIJAR",
+                () => _camController?.LockToCurrentPosition());
+            rx -= 58f;
+            MakeVSep(bar, rx, by, bh); rx -= 8f;
+
+            string[] spLbls = { "PAUSA","x1","x10","x100","x1000" };
+            float[]  spW    = { 48f, 36f, 36f, 42f, 48f };
+            _speedBgs = new Image[5];
+            for (int i = 4; i >= 0; i--)
             {
-                var eco = EconomyManager.Instance;
-
-                string moneyStr = eco.Money >= 0 ? $"💰  ${eco.Money:N0}" : $"💰  -${Mathf.Abs(eco.Money):N0}";
-                Color moneyCol  = eco.Money >= 0 ? new Color(0.2f, 1f, 0.45f) : new Color(1f, 0.3f, 0.3f);
-                DrawTopLabel(ref x, y, bH, moneyStr, moneyCol, 140f);
-
-                DrawVSep(x, y, bH); x += 8f;
-                DrawTopLabel(ref x, y, bH, $"⭐  {eco.Reputation}/100", Color.white, 100f);
-                DrawVSep(x, y, bH); x += 8f;
-            }
-
-            if (FFTimeManager.Instance != null)
-            {
-                string date = $"📅  Día {FFTimeManager.Instance.CurrentDay}  ·  {FFTimeManager.Instance.GetFormattedDate()}";
-                DrawTopLabel(ref x, y, bH, date, new Color(0.75f, 0.75f, 0.75f), 220f);
-            }
-
-            // Botones lado derecho: ☰ Menú | FIJAR | PAUSA x1 x10 x100 x1000
-            float rx = Screen.width - 8f;
-
-            // ☰ Menú
-            rx -= 64f + 3f;
-            if (GUI.Button(new Rect(rx, y, 64f, bH), "☰ Menú", _menuOpen ? _topBtnOn : _topBtn))
-                _menuOpen = !_menuOpen;
-            rx -= 6f; DrawVSep(rx, y, bH); rx -= 6f;
-
-            // FIJAR
-            bool locked = _camController != null && _camController.IsManuallyLocked;
-            rx -= 52f + 3f;
-            if (GUI.Button(new Rect(rx, y, 52f, bH), "FIJAR", locked ? _topBtnOn : _topBtn))
-                _camController?.LockToCurrentPosition();
-            rx -= 6f; DrawVSep(rx, y, bH); rx -= 6f;
-
-            // Velocidades del mapa
-            rx = MapSpeedBtn(rx, y, bH, "x1000", 4);
-            rx = MapSpeedBtn(rx, y, bH, "x100",  3);
-            rx = MapSpeedBtn(rx, y, bH, "x10",   2);
-            rx = MapSpeedBtn(rx, y, bH, "x1",    1);
-            rx = MapSpeedBtn(rx, y, bH, "PAUSA", 0);
-
-            if (_menuOpen) DrawMenuPopup();
-        }
-
-        private float MapSpeedBtn(float rx, float y, float h, string label, int idx)
-        {
-            float w = label == "PAUSA" || label == "x1000" ? 48f : 36f;
-            rx -= w + 3f;
-            bool on = TimeManager.Instance != null && TimeManager.Instance.CurrentSpeedIndex == idx;
-            if (GUI.Button(new Rect(rx, y, w, h), label, on ? _topBtnOn : _topBtn))
-                TimeManager.Instance?.SetSpeedIndex(idx);
-            return rx;
-        }
-
-        private void DrawMenuPopup()
-        {
-            float pw = 210f;
-            float bh = 32f;
-            float ph = 5 * (bh + 2f) + 8f;
-            float px = Screen.width - pw - 8f;
-            float py = TOP_H + 2f;
-
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0.04f, 0.1f, 0.97f);
-            GUI.DrawTexture(new Rect(px - 4f, py, pw + 8f, ph + 4f), Texture2D.whiteTexture);
-            GUI.color = new Color(0.2f, 0.5f, 1f, 0.6f);
-            GUI.DrawTexture(new Rect(px - 4f, py, pw + 8f, 1f), Texture2D.whiteTexture);
-            GUI.color = prev;
-
-            float y = py + 4f;
-
-            if (GUI.Button(new Rect(px, y, pw, bh), "▶  Volver a la partida", _topBtn))
-                _menuOpen = false;
-            y += bh + 2f;
-
-            if (GUI.Button(new Rect(px, y, pw, bh), "💾  Guardar partida", _topBtn))
-            {
-                _menuOpen = false;
-                Debug.Log("[FFUIManager] Guardar partida — pendiente de implementar");
-            }
-            y += bh + 2f;
-
-            if (GUI.Button(new Rect(px, y, pw, bh), "📂  Cargar Partida", _topBtn))
-            {
-                _menuOpen = false;
-                Debug.Log("[FFUIManager] Cargar partida — pendiente de implementar");
-            }
-            y += bh + 2f;
-
-            if (GUI.Button(new Rect(px, y, pw, bh), "⚙  Configuración", _topBtn))
-            {
-                _menuOpen = false;
-                Debug.Log("[FFUIManager] Configuración — pendiente de implementar");
-            }
-            y += bh + 2f;
-
-            if (GUI.Button(new Rect(px, y, pw, bh), "🚪  Salir", _topBtn))
-                Application.Quit();
-        }
-
-        private void DrawTopLabel(ref float x, float y, float h, string text, Color color, float w)
-        {
-            var prev = GUI.contentColor;
-            GUI.contentColor = color;
-            GUI.Label(new Rect(x, y, w, h), text, _lbl);
-            GUI.contentColor = prev;
-            x += w + 4f;
-        }
-
-        private void DrawVSep(float x, float y, float h)
-        {
-            var prev = GUI.color;
-            GUI.color = new Color(0.3f, 0.3f, 0.3f, 0.6f);
-            GUI.DrawTexture(new Rect(x, y, 1f, h), Texture2D.whiteTexture);
-            GUI.color = prev;
-        }
-
-        // ══════════════════════════════════════════════════════════════════════
-        // SIDEBAR — navegación
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawSidebar()
-        {
-            float sideH = Screen.height - TOP_H - TICKER_H;
-
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0.04f, 0.1f, 0.96f);
-            GUI.DrawTexture(new Rect(0, TOP_H, SIDEBAR_W, sideH), Texture2D.whiteTexture);
-            GUI.color = new Color(0.2f, 0.5f, 1f, 0.4f);
-            GUI.DrawTexture(new Rect(SIDEBAR_W - 1f, TOP_H, 1f, sideH), Texture2D.whiteTexture);
-            GUI.color = prev;
-
-            float y = TOP_H + 8f;
-
-            // Logo
-            GUI.Label(new Rect(0, y, SIDEBAR_W, 12f), "FREIGHT", _logoStyle);
-            GUI.Label(new Rect(0, y + 11f, SIDEBAR_W, 12f), "FORWARDER", _logoStyle);
-
-            prev = GUI.color;
-            GUI.color = new Color(0.2f, 0.5f, 1f, 0.5f);
-            GUI.DrawTexture(new Rect(6f, y + 24f, SIDEBAR_W - 12f, 1f), Texture2D.whiteTexture);
-            GUI.color = prev;
-            y += 30f;
-
-            // Botones de navegación
-            y = NavBtn(y, "📦", "Mercado",    Panel.Market);
-            y = NavBtn(y, "🚚", "Cargas",     Panel.ActiveCargos);
-            y = NavBtn(y, "👤", "Agentes",    Panel.Agents);
-            y = NavBtn(y, "👥", "Clientes",   Panel.Clients);
-            y = NavBtn(y, "💰", "Finanzas",   Panel.Finances);
-            y = NavBtn(y, "🏢", "Oficinas",   Panel.Offices);
-            y = NavBtn(y, "⚡", "Eventos",    Panel.Events);
-
-            // Contador de eventos no vistos (badge) — Eventos es el 7º botón (índice 6)
-            if (_eventLog.Count > 0 && _active != Panel.Events)
-            {
-                float badgeY = TOP_H + 30f + 6 * (BTN_H + 2f) + BTN_H * 0.5f - 8f;
-                prev = GUI.color;
-                GUI.color = new Color(1f, 0.3f, 0.2f, 0.9f);
-                GUI.DrawTexture(new Rect(SIDEBAR_W - 18f, badgeY, 16f, 16f), Texture2D.whiteTexture);
-                GUI.color = prev;
-                GUI.Label(new Rect(SIDEBAR_W - 18f, badgeY, 16f, 16f),
-                          _eventLog.Count > 9 ? "9+" : _eventLog.Count.ToString(), _badgeStyle);
+                int idx = i;
+                (Image bg, _) = MakeTopBtn($"Speed{i}", bar, rx, by, spW[i], bh, spLbls[i],
+                    () => TimeManager.Instance?.SetSpeedIndex(idx));
+                _speedBgs[i] = bg;
+                rx -= spW[i] + 3f;
             }
         }
 
-        private float NavBtn(float y, string icon, string label, Panel panel)
+        private void BuildSidebar(RectTransform c)
         {
-            bool on = _active == panel;
-            if (GUI.Button(new Rect(2f, y, SIDEBAR_W - 4f, BTN_H),
-                           $"{icon}\n{label}", on ? _navBtnOn : _navBtn))
-                SetPanel(on ? Panel.None : panel);
-            return y + BTN_H + 2f;
+            var sb = new GameObject("Sidebar").AddComponent<RectTransform>();
+            sb.SetParent(c, false);
+            sb.anchorMin = new Vector2(0,0); sb.anchorMax = new Vector2(0,1);
+            sb.pivot = new Vector2(0,0);
+            sb.offsetMin = new Vector2(0, TICKER_H);
+            sb.offsetMax = new Vector2(SIDEBAR_W, -TOP_H);
+            MakeImg(sb, C_BG_PANEL);
+
+            var border = MakeRect("SBBorder", sb,
+                new Vector2(1,0), new Vector2(1,1), new Vector2(1,0), Vector2.zero, new Vector2(1,0));
+            MakeImg(border, C_ACCENT);
+
+            float y = -8f;
+            MakeTxtPos("Logo1", sb, new Vector2(0,y), new Vector2(SIDEBAR_W,12),
+                "FREIGHT", 8, FontStyle.Bold, new Color(0.4f,0.7f,1f), TextAnchor.MiddleCenter); y -= 12f;
+            MakeTxtPos("Logo2", sb, new Vector2(0,y), new Vector2(SIDEBAR_W,12),
+                "FORWARDER", 8, FontStyle.Bold, new Color(0.4f,0.7f,1f), TextAnchor.MiddleCenter); y -= 12f;
+            var div = MakeRect("Div", sb, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                new Vector2(6,y), new Vector2(SIDEBAR_W-12,1));
+            MakeImg(div, C_ACCENT); y -= 6f;
+
+            string[] icons = {"📦","🚚","👤","👥","💰","🏢","⚡"};
+            string[] lbls  = {"Mercado","Cargas","Agentes","Clientes","Finanzas","Oficinas","Eventos"};
+            _navBgs = new Image[7];
+
+            for (int i = 0; i < 7; i++)
+            {
+                Panel p = SIDE_PANELS[i];
+                var rt = MakeRect($"Nav{i}", sb, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                    new Vector2(2f, y), new Vector2(SIDEBAR_W-4f, BTN_H));
+                var img = MakeImg(rt, C_BTN_OFF);
+                var btn = rt.gameObject.AddComponent<Button>();
+                btn.targetGraphic = img;
+                SetBtnColors(btn);
+                btn.onClick.AddListener(() => SetPanel(_active == p ? Panel.None : p));
+                MakeTxtStretch($"NavLbl{i}", rt, $"{icons[i]}\n{lbls[i]}", 10, FontStyle.Bold,
+                    C_GREY, TextAnchor.MiddleCenter);
+                _navBgs[i] = img;
+
+                if (i == 6)
+                {
+                    var bgGO = new GameObject("Badge");
+                    var bgRT = bgGO.AddComponent<RectTransform>();
+                    bgRT.SetParent(rt, false);
+                    bgRT.anchorMin = bgRT.anchorMax = new Vector2(1f,1f);
+                    bgRT.pivot = new Vector2(1f,1f);
+                    bgRT.anchoredPosition = new Vector2(-1f,-1f);
+                    bgRT.sizeDelta = new Vector2(16f,16f);
+                    bgGO.AddComponent<Image>().color = new Color(1f,0.3f,0.2f,0.9f);
+                    _badgeText = MakeTxtStretch("BadgeTxt", bgRT, "0", 9, FontStyle.Bold,
+                        Color.white, TextAnchor.MiddleCenter);
+                    _badgeGO = bgGO;
+                    _badgeGO.SetActive(false);
+                }
+                y -= BTN_H + 2f;
+            }
         }
 
-        // ── Routing ───────────────────────────────────────────────────────────
-        private void SetPanel(Panel panel)
+        private void BuildPanels(RectTransform c)
         {
-            _active    = panel;
-            _scroll    = Vector2.zero;
-            _menuOpen  = false;
-            _marketPanel?.SetVisible(panel == Panel.Market);
+            _panelGOs       = new GameObject[CONTENT_PANELS.Length];
+            _scrollContents = new RectTransform[CONTENT_PANELS.Length];
+            _panelHeaders   = new Text[CONTENT_PANELS.Length];
+            string[] titles = {
+                "🚚  CARGAS EN TRÁNSITO", "👤  AGENTES", "👥  CLIENTES",
+                "💰  FINANZAS", "🏢  OFICINAS", "⚡  EVENTOS"
+            };
+
+            for (int i = 0; i < CONTENT_PANELS.Length; i++)
+            {
+                var rt = MakeRect($"Panel{CONTENT_PANELS[i]}", c,
+                    new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                    new Vector2(PANEL_X, -PANEL_Y), new Vector2(PANEL_W, PANEL_MAX_H));
+                MakeImg(rt, C_BG_PANEL);
+                _panelGOs[i] = rt.gameObject;
+                _panelGOs[i].SetActive(false);
+
+                _panelHeaders[i] = MakeTxtPos("PanelHeader", rt, new Vector2(8,-6),
+                    new Vector2(PANEL_W-16, 24), titles[i], 13, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+
+                if (CONTENT_PANELS[i] == Panel.Finances)
+                {
+                    BuildFinancesContent(rt);
+                    continue;
+                }
+
+                var scrollHost = new GameObject("ScrollHost").AddComponent<RectTransform>();
+                scrollHost.SetParent(rt, false);
+                scrollHost.anchorMin = Vector2.zero; scrollHost.anchorMax = Vector2.one;
+                scrollHost.pivot = new Vector2(0.5f,0.5f);
+                scrollHost.offsetMin = new Vector2(4, 4);
+                scrollHost.offsetMax = new Vector2(-4, -36);
+
+                var viewport = new GameObject("Viewport").AddComponent<RectTransform>();
+                viewport.SetParent(scrollHost, false);
+                viewport.anchorMin = Vector2.zero; viewport.anchorMax = Vector2.one;
+                viewport.pivot = new Vector2(0.5f,0.5f);
+                viewport.offsetMin = viewport.offsetMax = Vector2.zero;
+                viewport.gameObject.AddComponent<RectMask2D>();
+
+                var content = new GameObject("Content").AddComponent<RectTransform>();
+                content.SetParent(viewport, false);
+                content.anchorMin = new Vector2(0,1); content.anchorMax = new Vector2(1,1);
+                content.pivot = new Vector2(0.5f,1f);
+                content.offsetMin = content.offsetMax = Vector2.zero;
+                content.sizeDelta = new Vector2(0, 400f);
+                _scrollContents[i] = content;
+
+                var sr = scrollHost.gameObject.AddComponent<ScrollRect>();
+                sr.viewport = viewport; sr.content = content;
+                sr.horizontal = false; sr.scrollSensitivity = 20f;
+                sr.movementType = ScrollRect.MovementType.Clamped;
+            }
         }
 
-        private void DrawCurrentPanel()
+        private void BuildFinancesContent(RectTransform panel)
+        {
+            float x = 12f, w = PANEL_W - 24f, y = -36f;
+
+            _finMoney = MakeTxtPos("FinMoney", panel, new Vector2(x,y), new Vector2(w,18),
+                "Liquidez: $0", 12, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
+            _finMoney.supportRichText = true; y -= 22f;
+
+            _finRep = MakeTxtPos("FinRep", panel, new Vector2(x,y), new Vector2(w,18),
+                "Reputación: 0/100", 11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft); y -= 20f;
+            _finRepFill = MakeBarRow(panel, x, ref y, w);
+
+            _finLevel = MakeTxtPos("FinLevel", panel, new Vector2(x,y), new Vector2(w,18),
+                "Nivel 1 — XP 0/100", 11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft); y -= 20f;
+            _finXpFill = MakeBarRow(panel, x, ref y, w);
+
+            var sep = MakeRect("FinSep", panel, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                new Vector2(x,y), new Vector2(w,1));
+            MakeImg(sep, new Color(0.3f,0.3f,0.3f,0.5f)); y -= 10f;
+
+            _finStats = MakeTxtPos("FinStats", panel, new Vector2(x,y), new Vector2(w,120),
+                "", 11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
+        }
+
+        private void BuildMenuPopup(RectTransform c)
+        {
+            float pw = 210f, bh = 32f, ph = 5*(bh+2f)+12f;
+            var popup = MakeRect("MenuPopup", c,
+                new Vector2(1,1), new Vector2(1,1), new Vector2(1,1),
+                new Vector2(-8f, -(TOP_H+2f)), new Vector2(pw, ph));
+            MakeImg(popup, new Color(0f,0.04f,0.10f,0.97f));
+            var top = MakeRect("PopupBorder", popup,
+                new Vector2(0,1), new Vector2(1,1), new Vector2(0,1), Vector2.zero, new Vector2(0,1));
+            MakeImg(top, new Color(0.2f,0.5f,1f,0.6f));
+
+            float y = -6f;
+            void Btn(string lbl, Action a) => AddMenuBtn(popup, lbl, ref y, pw, bh, a);
+            Btn("▶  Volver a la partida",  ToggleMenu);
+            Btn("💾  Guardar partida",      () => { ToggleMenu(); Debug.Log("[UI] Guardar — pendiente"); });
+            Btn("📂  Cargar Partida",       () => { ToggleMenu(); Debug.Log("[UI] Cargar — pendiente"); });
+            Btn("⚙  Configuración",        () => { ToggleMenu(); Debug.Log("[UI] Config — pendiente"); });
+            Btn("🚪  Salir",                Application.Quit);
+
+            _menuPopupGO = popup.gameObject;
+            _menuPopupGO.SetActive(false);
+        }
+
+        private void AddMenuBtn(RectTransform parent, string label, ref float y, float w, float h, Action onClick)
+        {
+            var rt = MakeRect("MBtn", parent, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                new Vector2(0,y), new Vector2(w,h));
+            var img = MakeImg(rt, C_BTN_OFF);
+            var btn = rt.gameObject.AddComponent<Button>();
+            btn.targetGraphic = img; SetBtnColors(btn);
+            btn.onClick.AddListener(onClick.Invoke);
+            MakeTxtPos("Lbl", rt, new Vector2(8, -(h*0.5f)), new Vector2(w-12,h),
+                label, 11, FontStyle.Bold, C_GREY, TextAnchor.MiddleLeft);
+            y -= h + 2f;
+        }
+
+        // ── Panel switching ───────────────────────────────────────────────────
+
+        private void SetPanel(Panel p)
+        {
+            _active = p;
+            _menuOpen = false;
+            _menuPopupGO?.SetActive(false);
+
+            for (int i = 0; i < CONTENT_PANELS.Length; i++)
+                _panelGOs[i].SetActive(CONTENT_PANELS[i] == p);
+
+            _marketPanel?.SetVisible(p == Panel.Market);
+            UpdateNavColors();
+            PopulateActivePanel();
+        }
+
+        private void UpdateNavColors()
+        {
+            for (int i = 0; i < _navBgs.Length; i++)
+                _navBgs[i].color = (_active == SIDE_PANELS[i]) ? C_BTN_ON : C_BTN_OFF;
+
+            bool hasBadge = _eventLog.Count > 0 && _active != Panel.Events;
+            _badgeGO?.SetActive(hasBadge);
+            if (hasBadge && _badgeText != null)
+                _badgeText.text = _eventLog.Count > 9 ? "9+" : _eventLog.Count.ToString();
+        }
+
+        private void PopulateActivePanel()
         {
             switch (_active)
             {
-                case Panel.ActiveCargos: DrawActiveCargos(); break;
-                case Panel.Agents:       DrawAgents();       break;
-                case Panel.Clients:      DrawClients();      break;
-                case Panel.Finances:     DrawFinances();     break;
-                case Panel.Offices:      DrawOffices();      break;
-                case Panel.Events:       DrawEvents();       break;
+                case Panel.ActiveCargos: PopulateActiveCargos(); break;
+                case Panel.Agents:       PopulateAgents();       break;
+                case Panel.Clients:      PopulateClients();      break;
+                case Panel.Finances:     RefreshFinances();      break;
+                case Panel.Offices:      PopulateOffices();      break;
+                case Panel.Events:       PopulateEvents();       break;
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL: CARGAS ACTIVAS
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawActiveCargos()
+        // ── Populate: Active Cargos ───────────────────────────────────────────
+
+        private void PopulateActiveCargos()
         {
             var cargos   = CargoManager.Instance?.ActiveCargos;
             int count    = cargos?.Count ?? 0;
-            int currentDay = FFTimeManager.Instance?.CurrentDay ?? 0;
-
-            float cardH  = 88f;
-            float listH  = Mathf.Min(count * cardH + 8f, Screen.height - PANEL_Y - TICKER_H - 50f);
-            float totalH = 36f + (count == 0 ? 28f : listH);
-
-            GUI.Box(new Rect(PANEL_X, PANEL_Y, PANEL_W, totalH), GUIContent.none, _box);
-
-            float x = PANEL_X + 8f;
-            float y = PANEL_Y + 6f;
-            GUI.Label(new Rect(x, y, PANEL_W - 16, 22f),
-                      $"🚚  CARGAS EN TRÁNSITO  ·  {count}", _title);
-            y += 28f;
-
-            if (count == 0)
-            {
-                GUI.Label(new Rect(x, y, PANEL_W - 16, 22f),
-                          "No hay cargas en tránsito. Cotizá una desde el Mercado.", _small);
-                return;
-            }
-
-            _scroll = GUI.BeginScrollView(
-                new Rect(PANEL_X + 4, y, PANEL_W - 8, listH), _scroll,
-                new Rect(0, 0, PANEL_W - 24, count * cardH));
+            int pi       = PanelIndex(Panel.ActiveCargos);
+            _panelHeaders[pi].text = $"🚚  CARGAS EN TRÁNSITO  ·  {count}";
+            var content  = _scrollContents[pi];
+            ClearChildren(content);
+            const float CH = 88f;
+            content.sizeDelta = new Vector2(0, count * CH + 8f);
+            int day = FFTimeManager.Instance?.CurrentDay ?? 0;
 
             for (int i = 0; i < count; i++)
             {
-                var c   = cargos[i];
-                var card = new Rect(2, i * cardH + 2f, PANEL_W - 28, cardH - 4f);
-                DrawRect(card, new Color(0.04f, 0.09f, 0.18f, 0.9f));
+                var c    = cargos[i];
+                var card = MakeCard(content, i, CH, new Color(0.04f,0.09f,0.18f,0.9f));
+                float pct = c.TotalTransitDays > 0
+                    ? Mathf.Clamp01((float)Mathf.Max(0, day - c.StartDay) / c.TotalTransitDays) : 0f;
+                Color barCol = pct < 0.5f ? new Color(0.2f,0.6f,1f) : new Color(0.2f,0.9f,0.4f);
 
-                float tx = card.x + 6f, ty = card.y + 4f, tw = card.width - 8f;
+                MakeTxtPos("Info", card, new Vector2(6,-4), new Vector2(card.sizeDelta.x-8, 62),
+                    $"{c.OriginCityId.Replace('_',' ')} → {c.DestinationCityId.Replace('_',' ')}\n" +
+                    $"{GetCargoTypeName(c.CargoType)}  ·  {GetTransportModeName(c.TransportMode)}  ·  {c.Weight:F0}t  ·  ${c.FinalPrice:N0}\n" +
+                    $"Agente: {c.AgentId.Replace('_',' ')}  ·  Riesgo: {RiskLabel(c)}",
+                    11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
 
-                GUI.Label(new Rect(tx, ty, tw, 18f),
-                          $"{c.OriginCityId.Replace('_',' ')} → {c.DestinationCityId.Replace('_',' ')}", _lbl);
-                ty += 20f;
-
-                GUI.Label(new Rect(tx, ty, tw, 15f),
-                          $"{GetCargoTypeName(c.CargoType)}  ·  {GetTransportModeName(c.TransportMode)}  ·  {c.Weight:F0} t  ·  ${c.FinalPrice:N0}",
-                          _small);
-                ty += 17f;
-
-                float pct      = c.TotalTransitDays > 0
-                    ? Mathf.Clamp01((float)Mathf.Max(0, currentDay - c.StartDay) / c.TotalTransitDays) : 0f;
-                Color barCol   = pct < 0.5f ? new Color(0.2f, 0.6f, 1f) : new Color(0.2f, 0.9f, 0.4f);
-
-                GUI.Label(new Rect(tx, ty, 110f, 14f), $"Llega en {Mathf.Max(0, c.DaysRemaining)} días", _small);
-                DrawBar(new Rect(tx + 114f, ty + 1f, tw - 114f, 11f), pct, barCol);
-                ty += 16f;
-
-                GUI.Label(new Rect(tx, ty, tw, 14f),
-                          $"Agente: {c.AgentId.Replace('_',' ')}  ·  Margen: {c.Margin*100:F0}%  ·  Riesgo: {RiskLabel(c)}",
-                          _small);
+                MakeTxtPos("Days", card, new Vector2(6,-66), new Vector2(114,14),
+                    $"Llega en {Mathf.Max(0, c.DaysRemaining)} días",
+                    10, FontStyle.Normal, new Color(0.65f,0.65f,0.65f), TextAnchor.UpperLeft);
+                MakeBarH(card, new Vector2(124f,-66f), new Vector2(card.sizeDelta.x-130f, 11f), pct, barCol);
             }
-            GUI.EndScrollView();
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL: AGENTES
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawAgents()
+        // ── Populate: Agents ──────────────────────────────────────────────────
+
+        private void PopulateAgents()
         {
-            var dict   = AgentManager.Instance?.GetAllAgents();
-            var agents = dict?.Values;
-            int count  = agents?.Count ?? 0;
+            var dict  = AgentManager.Instance?.GetAllAgents();
+            int count = dict?.Count ?? 0;
+            int pi    = PanelIndex(Panel.Agents);
+            _panelHeaders[pi].text = $"👤  AGENTES  ·  {count}";
+            var content = _scrollContents[pi];
+            ClearChildren(content);
+            const float CH = 68f;
+            content.sizeDelta = new Vector2(0, count * CH + 8f);
 
-            float cardH  = 68f;
-            float listH  = Mathf.Min(count * cardH + 8f, Screen.height - PANEL_Y - TICKER_H - 50f);
-            float totalH = 36f + (count == 0 ? 28f : listH);
-
-            GUI.Box(new Rect(PANEL_X, PANEL_Y, PANEL_W, totalH), GUIContent.none, _box);
-
-            float x = PANEL_X + 8f, y = PANEL_Y + 6f;
-            GUI.Label(new Rect(x, y, PANEL_W - 16, 22f), $"👤  AGENTES  ·  {count}", _title);
-            y += 28f;
-
-            if (count == 0) { GUI.Label(new Rect(x, y, PANEL_W - 16, 22f), "Sin agentes.", _small); return; }
-
-            _scroll = GUI.BeginScrollView(
-                new Rect(PANEL_X + 4, y, PANEL_W - 8, listH), _scroll,
-                new Rect(0, 0, PANEL_W - 24, count * cardH));
-
-            int ai = 0;
-            foreach (var a in agents)
+            int i = 0;
+            if (dict == null) return;
+            foreach (var a in dict.Values)
             {
-                int i = ai++;
-                var card = new Rect(2, i * cardH + 2f, PANEL_W - 28, cardH - 4f);
-                DrawRect(card, new Color(0.04f, 0.08f, 0.17f, 0.9f));
-
-                float tx = card.x + 6f, ty = card.y + 4f, tw = card.width - 8f;
-
-                GUI.Label(new Rect(tx, ty, tw, 18f),
-                          $"{a.GetStateEmoji()}  {a.Name}  —  {GetAgentPersonalityName(a.Personality)}", _lbl);
-                ty += 20f;
-
+                var card = MakeCard(content, i++, CH, new Color(0.04f,0.08f,0.17f,0.9f));
                 float trust = Mathf.Clamp01(a.PlayerTrust / 100f);
-                GUI.Label(new Rect(tx, ty, 100f, 14f), $"Confianza: {a.PlayerTrust:F0}", _small);
-                DrawBar(new Rect(tx + 104f, ty + 1f, tw - 104f, 11f), trust,
-                    trust > 0.6f ? new Color(0.2f, 0.8f, 0.3f) :
-                    trust > 0.3f ? new Color(0.9f, 0.7f, 0.1f) : new Color(0.9f, 0.2f, 0.2f));
-                ty += 17f;
+                Color trustCol = trust > 0.6f ? new Color(0.2f,0.8f,0.3f) :
+                                 trust > 0.3f ? new Color(0.9f,0.7f,0.1f) : new Color(0.9f,0.2f,0.2f);
 
-                GUI.Label(new Rect(tx, ty, tw, 14f),
-                          $"Estado: {GetAgentStateName(a.CurrentState)}  ·  Cargas: {a.CurrentCargoIds.Count}  ·  Precio: x{a.GetCurrentPriceMultiplier():F2}",
-                          _small);
+                MakeTxtPos("Info", card, new Vector2(6,-4), new Vector2(card.sizeDelta.x-8, 40),
+                    $"{a.GetStateEmoji()}  {a.Name}  —  {GetAgentPersonalityName(a.Personality)}\n" +
+                    $"Estado: {GetAgentStateName(a.CurrentState)}  ·  Cargas: {a.CurrentCargoIds.Count}  ·  Precio: x{a.GetCurrentPriceMultiplier():F2}",
+                    11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
+
+                MakeTxtPos("Trust", card, new Vector2(6,-46), new Vector2(104,14),
+                    $"Confianza: {a.PlayerTrust:F0}", 10, FontStyle.Normal, new Color(0.65f,0.65f,0.65f), TextAnchor.UpperLeft);
+                MakeBarH(card, new Vector2(114f,-46f), new Vector2(card.sizeDelta.x-120f, 11f), trust, trustCol);
             }
-            GUI.EndScrollView();
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL: CLIENTES
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawClients()
+        // ── Populate: Clients ─────────────────────────────────────────────────
+
+        private void PopulateClients()
         {
             var clients = ClientManager.Instance?.ActiveClients;
             int count   = clients?.Count ?? 0;
+            int pi      = PanelIndex(Panel.Clients);
 
-            float cardH  = 72f;
-            float listH  = Mathf.Min(count * cardH + 8f, Screen.height - PANEL_Y - TICKER_H - 80f);
-            float totalH = 36f + 40f + (count == 0 ? 28f : listH);
-
-            GUI.Box(new Rect(PANEL_X, PANEL_Y, PANEL_W, totalH), GUIContent.none, _box);
-
-            float x = PANEL_X + 8f, y = PANEL_Y + 6f, w = PANEL_W - 16f;
-            GUI.Label(new Rect(x, y, w, 22f), $"👥  CLIENTES  ·  {count} activos", _title);
-            y += 28f;
-
-            // Estadísticas rápidas
             int blacklisted = 0, vip = 0;
             if (clients != null)
                 foreach (var cl in clients) { if (cl.IsBlacklisted) blacklisted++; if (cl.IsVip) vip++; }
 
-            DrawRect(new Rect(x, y, w, 28f), new Color(0.05f, 0.08f, 0.15f, 0.8f));
-            GUI.Label(new Rect(x + 6f, y + 4f, w - 12f, 20f),
-                      $"⭐ VIP: {vip}   🚫 Bloqueados: {blacklisted}   📋 Total: {count}", _small);
-            y += 34f;
-
-            if (count == 0)
-            {
-                GUI.Label(new Rect(x, y, w, 22f), "Aún no hay clientes registrados.", _small);
-                return;
-            }
-
-            _scroll = GUI.BeginScrollView(
-                new Rect(PANEL_X + 4, y, PANEL_W - 8, listH), _scroll,
-                new Rect(0, 0, PANEL_W - 24, count * cardH));
+            _panelHeaders[pi].text = $"👥  CLIENTES  ·  {count}  ⭐{vip}  🚫{blacklisted}";
+            var content = _scrollContents[pi];
+            ClearChildren(content);
+            const float CH = 72f;
+            content.sizeDelta = new Vector2(0, count * CH + 8f);
 
             for (int i = 0; i < count; i++)
             {
-                var cl   = clients[i];
-                var card = new Rect(2, i * cardH + 2f, PANEL_W - 28, cardH - 4f);
-                Color bgCol = cl.IsBlacklisted ? new Color(0.15f, 0.03f, 0.03f, 0.9f) :
-                              cl.IsVip         ? new Color(0.05f, 0.12f, 0.05f, 0.9f) :
-                                                 new Color(0.04f, 0.08f, 0.16f, 0.9f);
-                DrawRect(card, bgCol);
-
-                float tx = card.x + 6f, ty = card.y + 4f, tw = card.width - 8f;
-
+                var cl = clients[i];
+                Color bgCol = cl.IsBlacklisted ? new Color(0.15f,0.03f,0.03f,0.9f) :
+                              cl.IsVip         ? new Color(0.05f,0.12f,0.05f,0.9f) :
+                                                 new Color(0.04f,0.08f,0.16f,0.9f);
+                var card  = MakeCard(content, i, CH, bgCol);
                 string badge = cl.IsBlacklisted ? " 🚫" : cl.IsVip ? " ⭐" : "";
-                GUI.Label(new Rect(tx, ty, tw, 18f),
-                          $"{cl.CompanyName}{badge}", _lbl);
-                ty += 20f;
 
-                GUI.Label(new Rect(tx, ty, tw, 15f),
-                          $"Tipo: {GetClientTypeName(cl.ClientType)}  ·  Enojo: {cl.AngerLevel}/5  ·  Entregas: {cl.TotalDeliveries}",
-                          _small);
-                ty += 17f;
-
-                GUI.Label(new Rect(tx, ty, tw, 14f),
-                          $"Relación: {cl.RelationshipLevel:F0}  ·  Exitosas: {cl.SuccessfulDeliveries}  ·  Fallidas: {cl.FailedDeliveries}",
-                          _small);
-            }
-            GUI.EndScrollView();
-        }
-
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL: FINANZAS
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawFinances()
-        {
-            float totalH = 286f;
-            GUI.Box(new Rect(PANEL_X, PANEL_Y, PANEL_W, totalH), GUIContent.none, _box);
-
-            float x = PANEL_X + 12f, y = PANEL_Y + 8f, w = PANEL_W - 24f;
-
-            GUI.Label(new Rect(x, y, w, 22f), "💰  FINANZAS", _title);
-            y += 28f;
-
-            if (EconomyManager.Instance == null) return;
-            var eco = EconomyManager.Instance;
-
-            Color moneyCol  = eco.Money >= 0 ? new Color(0.2f, 1f, 0.4f) : new Color(1f, 0.3f, 0.3f);
-            string moneyStr = eco.Money >= 0 ? $"${eco.Money:N0}" : $"-${Mathf.Abs(eco.Money):N0}";
-            DrawKV(x, ref y, w, "Liquidez",   moneyStr, moneyCol);
-            DrawKV(x, ref y, w, "Reputación", $"{eco.Reputation}/100", Color.white);
-            DrawBar(new Rect(x, y, w, 10f), eco.Reputation / 100f,
-                eco.Reputation > 50 ? new Color(0.2f, 0.8f, 0.3f) :
-                eco.Reputation > 25 ? new Color(0.9f, 0.7f, 0.1f) : new Color(0.9f, 0.2f, 0.2f));
-            y += 14f;
-
-            int   xpNeeded = eco.GetXPForNextLevel();
-            float xpPct    = xpNeeded > 0 ? (float)eco.CurrentXP / xpNeeded : 0f;
-            DrawKV(x, ref y, w, "Nivel", $"{eco.Level}  (XP {eco.CurrentXP}/{xpNeeded})", Color.white);
-            DrawBar(new Rect(x, y, w, 10f), xpPct, new Color(0.3f, 0.5f, 1f));
-            y += 18f;
-
-            var carg = CargoManager.Instance;
-            if (carg != null)
-            {
-                DrawSep(x, y, w); y += 10f;
-                DrawKV(x, ref y, w, "Completadas",   $"{carg.CompletedCargos.Count}", new Color(0.2f, 0.9f, 0.4f));
-                DrawKV(x, ref y, w, "Fallidas",      $"{carg.FailedCargos.Count}",    new Color(1f, 0.4f, 0.2f));
-                DrawKV(x, ref y, w, "En tránsito",   $"{carg.ActiveCargos.Count}",    new Color(0.4f, 0.7f, 1f));
-                DrawKV(x, ref y, w, "En mercado",    $"{carg.MarketCargos.Count}",    Color.white);
-
-                float rate = carg.GetSuccessRate();
-                DrawKV(x, ref y, w, "Tasa de éxito", $"{rate * 100:F0}%",
-                    rate > 0.7f ? new Color(0.2f, 0.9f, 0.4f) :
-                    rate > 0.4f ? new Color(0.9f, 0.7f, 0.1f) : new Color(1f, 0.3f, 0.2f));
+                MakeTxtPos("Info", card, new Vector2(6,-4), new Vector2(card.sizeDelta.x-8, 62),
+                    $"{cl.CompanyName}{badge}\n" +
+                    $"Tipo: {GetClientTypeName(cl.ClientType)}  ·  Enojo: {cl.AngerLevel}/5  ·  Entregas: {cl.TotalDeliveries}\n" +
+                    $"Relación: {cl.RelationshipLevel:F0}  ·  Exitosas: {cl.SuccessfulDeliveries}  ·  Fallidas: {cl.FailedDeliveries}",
+                    11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL: OFICINAS (ciudades desbloqueables)
-        // ══════════════════════════════════════════════════════════════════════
-        private void DrawOffices()
+        // ── Populate: Offices ─────────────────────────────────────────────────
+
+        private void PopulateOffices()
         {
             var allCities = CityDatabase.AllCities;
+            int pi        = PanelIndex(Panel.Offices);
             if (allCities == null) return;
 
-            var locked   = new List<WorldCity>();
+            var locked = new List<WorldCity>();
             var unlocked = new List<WorldCity>();
             foreach (var c in allCities.Values)
                 (c.IsUnlocked ? unlocked : locked).Add(c);
 
-            float cardH  = 54f;
-            int   count  = locked.Count;
-            float listH  = Mathf.Min(count * cardH + 8f, Screen.height - PANEL_Y - TICKER_H - 80f);
-            float totalH = 36f + 34f + (count == 0 ? 28f : listH);
+            _panelHeaders[pi].text = $"🏢  OFICINAS  ·  {unlocked.Count} activas, {locked.Count} por desbloquear";
+            var content  = _scrollContents[pi];
+            ClearChildren(content);
 
-            GUI.Box(new Rect(PANEL_X, PANEL_Y, PANEL_W, totalH), GUIContent.none, _box);
+            const float CH = 54f;
+            content.sizeDelta = new Vector2(0, locked.Count * CH + 8f);
+            int money = EconomyManager.Instance?.Money ?? 0;
 
-            float x = PANEL_X + 8f, y = PANEL_Y + 6f, w = PANEL_W - 16f;
-            GUI.Label(new Rect(x, y, w, 22f), "🏢  OFICINAS", _title);
-            y += 28f;
-
-            DrawRect(new Rect(x, y, w, 26f), new Color(0.05f, 0.1f, 0.18f, 0.8f));
-            GUI.Label(new Rect(x + 6f, y + 4f, w - 12f, 18f),
-                      $"Activas: {unlocked.Count}  ·  Por desbloquear: {locked.Count}", _small);
-            y += 32f;
-
-            if (count == 0)
+            for (int i = 0; i < locked.Count; i++)
             {
-                GUI.Label(new Rect(x, y, w, 22f), "✅  Todas las ciudades están desbloqueadas.", _small);
-                return;
+                var city = locked[i];
+                var card = MakeCard(content, i, CH, new Color(0.04f,0.08f,0.15f,0.9f));
+                float tw = card.sizeDelta.x - 84f;
+                string infra = (city.HasPort ? "⚓ " : "") + (city.HasAirport ? "✈ " : "") + (city.IsLandHub ? "🚛" : "");
+
+                MakeTxtPos("Info", card, new Vector2(6,-4), new Vector2(tw,44),
+                    $"📍 {city.DisplayName}  ·  {city.Country}\n" +
+                    $"{(infra.Length > 0 ? infra : "Sin infraestructura especial")}",
+                    11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
+
+                bool canAfford = money >= city.UnlockCost;
+                var btnRT = MakeRect("UnlockBtn", card,
+                    new Vector2(1,1), new Vector2(1,1), new Vector2(1,1),
+                    new Vector2(-4,-8), new Vector2(76,38));
+                var btnImg = MakeImg(btnRT, canAfford
+                    ? new Color(0.1f,0.4f,0.15f,0.95f) : new Color(0.3f,0.3f,0.3f,0.7f));
+                MakeTxtStretch("BtnLbl", btnRT,
+                    $"${city.UnlockCost:N0}\n🔓 Abrir", 10, FontStyle.Bold,
+                    canAfford ? Color.white : new Color(0.5f,0.5f,0.5f), TextAnchor.MiddleCenter);
+
+                if (canAfford)
+                {
+                    string cid = city.Id; int cost = city.UnlockCost;
+                    var btn = btnRT.gameObject.AddComponent<Button>();
+                    btn.targetGraphic = btnImg; SetBtnColors(btn);
+                    btn.onClick.AddListener(() =>
+                    {
+                        EconomyManager.Instance?.SubtractMoney(cost);
+                        CargoManager.Instance?.UnlockCity(cid);
+                        PopulateOffices();
+                    });
+                }
             }
+        }
 
-            _scroll = GUI.BeginScrollView(
-                new Rect(PANEL_X + 4, y, PANEL_W - 8, listH), _scroll,
-                new Rect(0, 0, PANEL_W - 24, count * cardH));
+        // ── Populate: Events ──────────────────────────────────────────────────
 
-            int currentMoney = EconomyManager.Instance?.Money ?? 0;
+        private void PopulateEvents()
+        {
+            int count = _eventLog.Count;
+            int pi    = PanelIndex(Panel.Events);
+            _panelHeaders[pi].text = $"⚡  EVENTOS  ·  {count} registrados";
+            var content = _scrollContents[pi];
+            ClearChildren(content);
+            const float CH = 56f;
+            content.sizeDelta = new Vector2(0, count * CH + 8f);
 
             for (int i = 0; i < count; i++)
             {
-                var city = locked[i];
-                var card = new Rect(2, i * cardH + 2f, PANEL_W - 28, cardH - 4f);
-                DrawRect(card, new Color(0.04f, 0.08f, 0.15f, 0.9f));
-
-                float tx = card.x + 6f, ty = card.y + 4f, tw = card.width - 80f;
-
-                GUI.Label(new Rect(tx, ty, tw, 18f), $"📍  {city.DisplayName}  ·  {city.Country}", _lbl);
-                ty += 20f;
-
-                string infra = "";
-                if (city.HasPort)    infra += "⚓ Puerto  ";
-                if (city.HasAirport) infra += "✈ Aeropuerto  ";
-                if (city.IsLandHub)  infra += "🚛 Tierra";
-                GUI.Label(new Rect(tx, ty, tw, 14f), infra.Length > 0 ? infra : "Sin infraestructura especial", _small);
-
-                // Botón desbloquear
-                bool canAfford  = currentMoney >= city.UnlockCost;
-                string btnLabel = $"${city.UnlockCost:N0}\n🔓 Abrir";
-                var btnRect     = new Rect(card.xMax - 74f, card.y + 8f, 70f, 36f);
-
-                var prevC = GUI.contentColor;
-                GUI.contentColor = canAfford ? Color.white : new Color(0.5f, 0.5f, 0.5f);
-                GUI.enabled = canAfford;
-                if (GUI.Button(btnRect, btnLabel))
-                {
-                    EconomyManager.Instance?.SubtractMoney(city.UnlockCost);
-                    CargoManager.Instance?.UnlockCity(city.Id);
-                    _scroll = Vector2.zero;
-                }
-                GUI.enabled = true;
-                GUI.contentColor = prevC;
+                var ev   = _eventLog[i];
+                var card = MakeCard(content, i, CH, new Color(0.10f,0.06f,0.02f,0.9f));
+                MakeTxtPos("EvTxt", card, new Vector2(6,-4), new Vector2(card.sizeDelta.x-60,46),
+                    ev.Text, 11, FontStyle.Normal, ev.Color, TextAnchor.UpperLeft);
+                MakeTxtPos("Day", card,
+                    new Vector2(card.sizeDelta.x-52f,-4), new Vector2(48,14),
+                    $"Día {ev.Day}", 10, FontStyle.Normal, new Color(0.5f,0.5f,0.5f), TextAnchor.UpperLeft);
             }
-            GUI.EndScrollView();
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // PANEL: EVENTOS
-        // ══════════════════════════════════════════════════════════════════════
+        // ── Finances ──────────────────────────────────────────────────────────
+
+        private void RefreshFinances()
+        {
+            var eco  = EconomyManager.Instance;
+            var carg = CargoManager.Instance;
+            if (eco == null || _finMoney == null) return;
+
+            string moneyStr = eco.Money >= 0 ? $"${eco.Money:N0}" : $"-${Mathf.Abs(eco.Money):N0}";
+            _finMoney.text  = $"Liquidez:  {moneyStr}";
+            _finMoney.color = eco.Money >= 0 ? new Color(0.2f,1f,0.4f) : new Color(1f,0.3f,0.3f);
+
+            _finRep.text   = $"Reputación:  {eco.Reputation}/100";
+            SetBarFill(_finRepFill, eco.Reputation / 100f,
+                eco.Reputation > 50 ? new Color(0.2f,0.8f,0.3f) :
+                eco.Reputation > 25 ? new Color(0.9f,0.7f,0.1f) : new Color(0.9f,0.2f,0.2f));
+
+            int   xpNeeded = eco.GetXPForNextLevel();
+            float xpPct    = xpNeeded > 0 ? (float)eco.CurrentXP / xpNeeded : 0f;
+            _finLevel.text = $"Nivel {eco.Level}  —  XP {eco.CurrentXP}/{xpNeeded}";
+            SetBarFill(_finXpFill, xpPct, new Color(0.3f,0.5f,1f));
+
+            if (carg != null)
+            {
+                float rate = carg.GetSuccessRate();
+                _finStats.text =
+                    $"Completadas:  {carg.CompletedCargos.Count}\n" +
+                    $"Fallidas:  {carg.FailedCargos.Count}\n" +
+                    $"En tránsito:  {carg.ActiveCargos.Count}\n" +
+                    $"En mercado:  {carg.MarketCargos.Count}\n" +
+                    $"Tasa de éxito:  {rate * 100:F0}%";
+            }
+        }
+
+        private void RefreshFinancesIfVisible()
+        {
+            if (_active == Panel.Finances) RefreshFinances();
+        }
+
+        // ── Top bar refresh ───────────────────────────────────────────────────
+
+        private void RefreshTopBar()
+        {
+            if (_moneyText == null) return;
+            var eco  = EconomyManager.Instance;
+            var time = FFTimeManager.Instance;
+
+            int  money    = eco?.Money ?? 0;
+            int  rep      = eco?.Reputation ?? 0;
+            int  day      = time?.CurrentDay ?? 0;
+            int  speedIdx = TimeManager.Instance?.CurrentSpeedIndex ?? 1;
+            bool locked   = _camController != null && _camController.IsManuallyLocked;
+            bool menuOpen = _menuOpen;
+
+            if (money == _tbMoney && rep == _tbRep && day == _tbDay &&
+                speedIdx == _tbSpeed && locked == _tbLocked && menuOpen == _tbMenu)
+                return;
+
+            if (money != _tbMoney || rep != _tbRep)
+            {
+                _moneyText.text  = money >= 0 ? $"💰  ${money:N0}" : $"💰  -${Mathf.Abs(money):N0}";
+                _moneyText.color = money >= 0 ? new Color(0.2f,1f,0.4f) : new Color(1f,0.3f,0.3f);
+                _repText.text    = $"⭐  {rep}/100";
+            }
+            if (day != _tbDay)
+                _dateText.text = $"📅  Día {day}  ·  {time?.GetFormattedDate() ?? "--/--/----"}";
+            if (speedIdx != _tbSpeed)
+                for (int i = 0; i < _speedBgs.Length; i++)
+                    _speedBgs[i].color = (i == speedIdx) ? C_BTN_ON : C_BTN_OFF;
+            if (locked != _tbLocked && _lockBg != null)
+                _lockBg.color = locked ? C_BTN_ON : C_BTN_OFF;
+            if (menuOpen != _tbMenu && _menuBg != null)
+                _menuBg.color = menuOpen ? C_BTN_ON : C_BTN_OFF;
+
+            _tbMoney  = money;
+            _tbRep    = rep;
+            _tbDay    = day;
+            _tbSpeed  = speedIdx;
+            _tbLocked = locked;
+            _tbMenu   = menuOpen;
+        }
+
+        // ── Events ────────────────────────────────────────────────────────────
+
         private void OnEventTriggered(GameEvent evt, Cargo cargo)
         {
             string route = $"{cargo.OriginCityId.Replace('_',' ')} → {cargo.DestinationCityId.Replace('_',' ')}";
@@ -613,140 +678,200 @@ namespace FreightForwarder.UI
                 Day   = FFTimeManager.Instance?.CurrentDay ?? 0
             });
             if (_eventLog.Count > MAX_EVENT_LOG) _eventLog.RemoveAt(_eventLog.Count - 1);
+            UpdateNavColors();
+            if (_active == Panel.Events) PopulateEvents();
         }
 
-        private void DrawEvents()
+        private void OnDayPassed()
         {
-            int count    = _eventLog.Count;
-            float cardH  = 56f;
-            float listH  = Mathf.Min(count * cardH + 8f, Screen.height - PANEL_Y - TICKER_H - 50f);
-            float totalH = 36f + (count == 0 ? 36f : listH);
-
-            GUI.Box(new Rect(PANEL_X, PANEL_Y, PANEL_W, totalH), GUIContent.none, _box);
-
-            float x = PANEL_X + 8f, y = PANEL_Y + 6f, w = PANEL_W - 16f;
-            GUI.Label(new Rect(x, y, w, 22f), $"⚡  EVENTOS  ·  {count} registrados", _title);
-            y += 28f;
-
-            if (count == 0)
-            {
-                GUI.Label(new Rect(x, y, w, 28f),
-                          "Sin eventos recientes. Los eventos aparecen durante el tránsito de cargas.", _small);
-                return;
-            }
-
-            _scroll = GUI.BeginScrollView(
-                new Rect(PANEL_X + 4, y, PANEL_W - 8, listH), _scroll,
-                new Rect(0, 0, PANEL_W - 24, count * cardH));
-
-            for (int i = 0; i < count; i++)
-            {
-                var ev   = _eventLog[i];
-                var card = new Rect(2, i * cardH + 2f, PANEL_W - 28, cardH - 4f);
-                DrawRect(card, new Color(0.1f, 0.06f, 0.02f, 0.9f));
-
-                float tx = card.x + 6f, ty = card.y + 4f, tw = card.width - 60f;
-
-                var prevC = GUI.contentColor;
-                GUI.contentColor = ev.Color;
-                GUI.Label(new Rect(tx, ty, tw, 34f), ev.Text, _small);
-                GUI.contentColor = new Color(0.5f, 0.5f, 0.5f);
-                GUI.Label(new Rect(card.xMax - 54f, ty, 50f, 16f), $"Día {ev.Day}", _small);
-                GUI.contentColor = prevC;
-            }
-            GUI.EndScrollView();
+            if (_active != Panel.None && _active != Panel.Market)
+                PopulateActivePanel();
         }
 
-        // ── Helpers de dibujo ─────────────────────────────────────────────────
+        // ── Helpers ───────────────────────────────────────────────────────────
+
+        private void ToggleMenu()
+        {
+            _menuOpen = !_menuOpen;
+            _menuPopupGO?.SetActive(_menuOpen);
+        }
+
         private static string RiskLabel(Cargo c)
         {
-            int risk = c.EventsEncountered?.Count ?? 0;
-            return risk == 0 ? "🟢 Bajo" : risk == 1 ? "🟡 Medio" : "🔴 Alto";
+            int r = c.EventsEncountered?.Count ?? 0;
+            return r == 0 ? "🟢 Bajo" : r == 1 ? "🟡 Medio" : "🔴 Alto";
         }
 
-        private void DrawKV(float x, ref float y, float w, string key, string val, Color valColor)
+        private int PanelIndex(Panel p)
         {
-            GUI.Label(new Rect(x, y, w * 0.48f, 18f), key, _small);
-            var prev = GUI.contentColor;
-            GUI.contentColor = valColor;
-            GUI.Label(new Rect(x + w * 0.48f, y, w * 0.52f, 18f), val, _lbl);
-            GUI.contentColor = prev;
-            y += 20f;
+            for (int i = 0; i < CONTENT_PANELS.Length; i++)
+                if (CONTENT_PANELS[i] == p) return i;
+            return -1;
         }
 
-        private void DrawBar(Rect r, float fill, Color color)
+        private static void ClearChildren(Transform t)
         {
-            var prev = GUI.color;
-            GUI.color = new Color(0.12f, 0.12f, 0.12f, 0.9f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            float filled = Mathf.Clamp01(fill) * r.width;
-            if (filled > 0f) { GUI.color = color; GUI.DrawTexture(new Rect(r.x, r.y, filled, r.height), Texture2D.whiteTexture); }
-            GUI.color = prev;
+            for (int i = t.childCount - 1; i >= 0; i--)
+                Destroy(t.GetChild(i).gameObject);
         }
 
-        private void DrawRect(Rect r, Color c)
+        private static void SetBarFill(Image fill, float amount, Color col)
         {
-            var prev = GUI.color; GUI.color = c;
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = prev;
+            if (fill == null) return;
+            fill.fillAmount = Mathf.Clamp01(amount);
+            fill.color = col;
         }
 
-        private void DrawSep(float x, float y, float w)
+        // ── UGUI factory ──────────────────────────────────────────────────────
+
+        private static RectTransform GetOrCreateCanvas()
         {
-            var prev = GUI.color;
-            GUI.color = new Color(0.3f, 0.3f, 0.3f, 0.5f);
-            GUI.DrawTexture(new Rect(x, y, w, 1f), Texture2D.whiteTexture);
-            GUI.color = prev;
+            // EventSystem check MUST come before any Canvas lookup —
+            // the Canvas may already exist in the scene but EventSystem may not.
+            if (FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
+            {
+                var es = new GameObject("EventSystem");
+                es.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                es.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            }
+
+            Canvas found = FindAnyObjectByType<Canvas>();
+            if (found != null)
+            {
+                // Patch existing canvas — may have been created with wrong settings
+                if (found.GetComponent<GraphicRaycaster>() == null)
+                    found.gameObject.AddComponent<GraphicRaycaster>();
+                var existCs = found.GetComponent<CanvasScaler>();
+                if (existCs != null)
+                {
+                    existCs.uiScaleMode        = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                    existCs.referenceResolution = new Vector2(1280, 720);
+                    existCs.matchWidthOrHeight  = 0.5f;
+                }
+                found.sortingOrder = 10;
+                return found.GetComponent<RectTransform>();
+            }
+
+            var go = new GameObject("UICanvas");
+            var c  = go.AddComponent<Canvas>();
+            c.renderMode = RenderMode.ScreenSpaceOverlay; c.sortingOrder = 10;
+            var cs = go.AddComponent<CanvasScaler>();
+            cs.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            cs.referenceResolution = new Vector2(1280, 720);
+            cs.matchWidthOrHeight  = 0.5f;
+            go.AddComponent<GraphicRaycaster>();
+            return go.GetComponent<RectTransform>();
         }
 
-        // ── Styles ────────────────────────────────────────────────────────────
-        private void EnsureStyles()
+        private static RectTransform MakeRect(string name, RectTransform parent,
+            Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 pos, Vector2 size)
         {
-            if (_ready) return;
-            _ready = true;
-
-            _navBtn = new GUIStyle(GUI.skin.button)
-                { fontSize = 10, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _navBtn.normal.textColor = new Color(0.75f, 0.75f, 0.75f);
-
-            _navBtnOn = new GUIStyle(_navBtn);
-            _navBtnOn.normal.background = MakeTex(new Color(0.1f, 0.35f, 0.8f, 0.95f));
-            _navBtnOn.normal.textColor  = Color.white;
-
-            _topBtn = new GUIStyle(GUI.skin.button) { fontSize = 11, fontStyle = FontStyle.Bold };
-            _topBtn.normal.textColor = new Color(0.7f, 0.7f, 0.7f);
-
-            _topBtnOn = new GUIStyle(_topBtn);
-            _topBtnOn.normal.background = MakeTex(new Color(0.15f, 0.4f, 0.85f));
-            _topBtnOn.normal.textColor  = Color.white;
-
-            _box = new GUIStyle(GUI.skin.box);
-            _box.normal.background = MakeTex(new Color(0f, 0.04f, 0.1f, 0.93f));
-
-            _title = new GUIStyle(GUI.skin.label) { fontSize = 13, fontStyle = FontStyle.Bold };
-            _title.normal.textColor = Color.white;
-
-            _lbl = new GUIStyle(GUI.skin.label) { fontSize = 12, fontStyle = FontStyle.Bold };
-            _lbl.normal.textColor = Color.white;
-
-            _small = new GUIStyle(GUI.skin.label) { fontSize = 11, wordWrap = true };
-            _small.normal.textColor = new Color(0.75f, 0.75f, 0.75f);
-
-            _logoStyle = new GUIStyle(GUI.skin.label)
-                { fontSize = 8, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _logoStyle.normal.textColor = new Color(0.4f, 0.7f, 1f);
-
-            _badgeStyle = new GUIStyle(GUI.skin.label)
-                { fontSize = 9, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            _badgeStyle.normal.textColor = Color.white;
+            var go = new GameObject(name); var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            rt.anchorMin = anchorMin; rt.anchorMax = anchorMax; rt.pivot = pivot;
+            rt.anchoredPosition = pos; rt.sizeDelta = size;
+            return rt;
         }
 
-        private static Texture2D MakeTex(Color col)
+        private static Image MakeImg(RectTransform rt, Color col)
         {
-            var t = new Texture2D(2, 2);
-            t.SetPixels(new[] { col, col, col, col });
-            t.Apply();
+            var img = rt.gameObject.AddComponent<Image>(); img.color = col; return img;
+        }
+
+        private Text MakeTxtPos(string name, RectTransform parent, Vector2 pos, Vector2 size,
+            string text, int fontSize, FontStyle style, Color color, TextAnchor anchor)
+        {
+            var rt = MakeRect(name, parent, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1), pos, size);
+            var t  = rt.gameObject.AddComponent<Text>();
+            t.text = text; t.fontSize = fontSize; t.fontStyle = style; t.color = color;
+            t.alignment = anchor; t.font = _font;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow   = VerticalWrapMode.Overflow;
             return t;
+        }
+
+        private Text MakeTxtStretch(string name, RectTransform parent, string text,
+            int fontSize, FontStyle style, Color color, TextAnchor anchor, Vector2 margin = default)
+        {
+            var go = new GameObject(name); var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f,0.5f);
+            rt.offsetMin = margin; rt.offsetMax = -margin;
+            var t = rt.gameObject.AddComponent<Text>();
+            t.text = text; t.fontSize = fontSize; t.fontStyle = style; t.color = color;
+            t.alignment = anchor; t.font = _font;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow   = VerticalWrapMode.Overflow;
+            return t;
+        }
+
+        private RectTransform MakeCard(RectTransform content, int idx, float cardH, Color bg)
+        {
+            float w = content.sizeDelta.x > 0 ? content.sizeDelta.x - 8f : PANEL_W - 8f;
+            var card = MakeRect($"Card{idx}", content,
+                new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                new Vector2(4f, -(idx * cardH + 4f)), new Vector2(w, cardH - 4f));
+            MakeImg(card, bg);
+            return card;
+        }
+
+        private void MakeBarH(RectTransform parent, Vector2 pos, Vector2 size, float fill, Color col)
+        {
+            var bg = MakeRect("BarBg", parent, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1), pos, size);
+            bg.gameObject.AddComponent<Image>().color = new Color(0.12f,0.12f,0.12f,0.9f);
+            var fillRT = new GameObject("BarFill").AddComponent<RectTransform>();
+            fillRT.SetParent(bg, false);
+            fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one;
+            fillRT.pivot = new Vector2(0,0.5f); fillRT.offsetMin = fillRT.offsetMax = Vector2.zero;
+            var img = fillRT.gameObject.AddComponent<Image>();
+            img.type = Image.Type.Filled; img.fillMethod = Image.FillMethod.Horizontal;
+            img.fillOrigin = 0; img.fillAmount = Mathf.Clamp01(fill); img.color = col;
+        }
+
+        private Image MakeBarRow(RectTransform parent, float x, ref float y, float w)
+        {
+            var bg = MakeRect("Bar", parent, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                new Vector2(x,y), new Vector2(w,10));
+            bg.gameObject.AddComponent<Image>().color = new Color(0.12f,0.12f,0.12f,0.9f);
+            var fillRT = new GameObject("Fill").AddComponent<RectTransform>();
+            fillRT.SetParent(bg, false);
+            fillRT.anchorMin = Vector2.zero; fillRT.anchorMax = Vector2.one;
+            fillRT.pivot = new Vector2(0,0.5f); fillRT.offsetMin = fillRT.offsetMax = Vector2.zero;
+            var img = fillRT.gameObject.AddComponent<Image>();
+            img.type = Image.Type.Filled; img.fillMethod = Image.FillMethod.Horizontal;
+            img.fillOrigin = 0; img.fillAmount = 0f;
+            y -= 14f;
+            return img;
+        }
+
+        private (Image bg, Button btn) MakeTopBtn(string name, RectTransform c,
+            float rx, float ry, float w, float h, string lbl, Action onClick)
+        {
+            var rt  = MakeRect(name, c, new Vector2(1,1), new Vector2(1,1), new Vector2(1,1),
+                new Vector2(rx,ry), new Vector2(w,h));
+            var img = MakeImg(rt, C_BTN_OFF);
+            var btn = rt.gameObject.AddComponent<Button>();
+            btn.targetGraphic = img; SetBtnColors(btn);
+            btn.onClick.AddListener(onClick.Invoke);
+            MakeTxtStretch("Lbl", rt, lbl, 11, FontStyle.Bold, C_GREY, TextAnchor.MiddleCenter);
+            return (img, btn);
+        }
+
+        private void MakeVSep(RectTransform bar, float rx, float ry, float h)
+        {
+            var sep = MakeRect("VSep", bar, new Vector2(1,1), new Vector2(1,1), new Vector2(1,1),
+                new Vector2(rx,ry), new Vector2(1,h));
+            MakeImg(sep, new Color(0.3f,0.3f,0.3f,0.6f));
+        }
+
+        private static void SetBtnColors(Button btn)
+        {
+            var cb = btn.colors;
+            cb.normalColor      = Color.white;
+            cb.highlightedColor = new Color(0.2f,0.4f,0.9f,1f);
+            cb.pressedColor     = new Color(0.1f,0.25f,0.7f,1f);
+            btn.colors = cb;
         }
     }
 }

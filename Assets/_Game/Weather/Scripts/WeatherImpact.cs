@@ -49,7 +49,7 @@ namespace FreightForwarder.Weather
         // Once per game day: add 1 extra day only if a cyclone directly affects the route
         private void OnDayPassed()
         {
-            if (CargoManager.Instance == null) return;
+            if (CargoManager.Instance == null || _grid == null) return;
             foreach (var cargo in CargoManager.Instance.ActiveCargos)
             {
                 if (RouteHasCyclone(cargo))

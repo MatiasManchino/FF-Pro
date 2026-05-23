@@ -2,14 +2,10 @@ using System.Collections.Generic;
 using FreightForwarder.Managers;
 using FreightForwarder.Models;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FreightForwarder.UI
 {
-    /// <summary>
-    /// Cinta de noticias en la parte inferior de la pantalla.
-    /// Los mensajes entran por la derecha y salen por la izquierda.
-    /// Agregá este componente al GameObject [FF System].
-    /// </summary>
     public class NewsTicker : MonoBehaviour
     {
         private struct TickerMsg
@@ -22,20 +18,27 @@ namespace FreightForwarder.UI
 
         private string _current      = "";
         private Color  _currentColor = Color.white;
-        private float  _x;           // posición horizontal del texto
-        private float  _textWidth    = 0f;
+        private float  _x;
+        private float  _textWidth;
         private bool   _scrolling;
-        private bool   _widthReady;
 
-        private const float SPEED    = 130f;   // píxeles por segundo
-        private const float BAR_H    = 28f;
-        private const float LABEL_W  = 90f;    // ancho del tag "► FF NEWS"
+        private const float SPEED   = 130f;
+        private const float BAR_H   = 28f;
+        private const float LABEL_W = 90f;
 
-        private GUIStyle _tickerStyle;
-        private GUIStyle _tagStyle;
-        private bool     _ready;
+        // UGUI refs
+        private RectTransform _textRT;
+        private Text          _tickerText;
+        private float         _scrollAreaWidth;
 
-        // ── Ciclo de vida ─────────────────────────────────────────────────────
+        private static Font _fontCache;
+        private static Font _font => _fontCache != null
+            ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
+
+        // ── Lifecycle ─────────────────────────────────────────────────────────
+
+        private void Awake() => BuildUI();
+
         private void Start()
         {
             if (EconomyManager.Instance != null)
@@ -44,9 +47,7 @@ namespace FreightForwarder.UI
                 EconomyManager.Instance.OnReputationChanged += OnRepChanged;
             }
             if (GameManager.Instance != null)
-            {
                 GameManager.Instance.OnGameOver += OnGameOver;
-            }
             if (CargoManager.Instance != null)
             {
                 CargoManager.Instance.OnCargoCompleted     += OnCargoCompleted;
@@ -55,13 +56,9 @@ namespace FreightForwarder.UI
                 CargoManager.Instance.OnCargoAddedToMarket += OnCargoAdded;
             }
             if (EventManager.Instance != null)
-            {
                 EventManager.Instance.OnEventTriggered += OnEventTriggered;
-            }
             if (FFTimeManager.Instance != null)
-            {
                 FFTimeManager.Instance.OnDayPassed += OnDayPassed;
-            }
         }
 
         private void OnDestroy()
@@ -72,9 +69,7 @@ namespace FreightForwarder.UI
                 EconomyManager.Instance.OnReputationChanged -= OnRepChanged;
             }
             if (GameManager.Instance != null)
-            {
                 GameManager.Instance.OnGameOver -= OnGameOver;
-            }
             if (CargoManager.Instance != null)
             {
                 CargoManager.Instance.OnCargoCompleted     -= OnCargoCompleted;
@@ -83,74 +78,81 @@ namespace FreightForwarder.UI
                 CargoManager.Instance.OnCargoAddedToMarket -= OnCargoAdded;
             }
             if (EventManager.Instance != null)
-            {
                 EventManager.Instance.OnEventTriggered -= OnEventTriggered;
-            }
             if (FFTimeManager.Instance != null)
-            {
                 FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
-            }
         }
 
-        // ── Update: avanza el scroll ──────────────────────────────────────────
+        // ── Scroll update ─────────────────────────────────────────────────────
+
         private void Update()
         {
-            if (!_scrolling) return;
+            if (!_scrolling || _textRT == null) return;
 
             _x -= SPEED * Time.deltaTime;
+            _textRT.anchoredPosition = new Vector2(_x, 0f);
 
-            // Solo avanza al siguiente cuando ya se midió el ancho real del texto
-            if (_widthReady && _x + _textWidth < 0f)
+            if (_x + _textWidth < 0f)
                 StartNext();
         }
 
-        // ── OnGUI ─────────────────────────────────────────────────────────────
-        private void OnGUI()
+        // ── UI construction ───────────────────────────────────────────────────
+
+        private void BuildUI()
         {
-            EnsureStyles();
+            var canvasRT = GetOrCreateCanvas();
 
-            float barY = Screen.height - BAR_H;
+            // Full-width bar anchored to bottom of screen
+            var bar = MakeRect("TickerBar", canvasRT,
+                new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 0),
+                Vector2.zero, new Vector2(0, BAR_H));
+            MakeImage(bar, new Color(0f, 0.03f, 0.07f, 0.92f));
 
-            // Fondo
-            var prev = GUI.color;
-            GUI.color = new Color(0f, 0.03f, 0.07f, 0.92f);
-            GUI.DrawTexture(new Rect(0, barY, Screen.width, BAR_H), Texture2D.whiteTexture);
+            // Top border line
+            var border = MakeRect("TickerBorder", bar,
+                new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, 1),
+                Vector2.zero, new Vector2(0, 1f));
+            MakeImage(border, new Color(0.25f, 0.55f, 1f, 0.7f));
 
-            // Línea superior
-            GUI.color = new Color(0.25f, 0.55f, 1f, 0.7f);
-            GUI.DrawTexture(new Rect(0, barY, Screen.width, 1f), Texture2D.whiteTexture);
+            // "► FF NEWS" tag on the left
+            var tag = MakeRect("TickerTag", bar,
+                new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0),
+                Vector2.zero, new Vector2(LABEL_W, 0));
+            MakeImage(tag, new Color(0.15f, 0.15f, 0.35f, 1f));
 
-            // Tag izquierdo "► FF NEWS"
-            GUI.color = new Color(0.15f, 0.15f, 0.35f, 1f);
-            GUI.DrawTexture(new Rect(0, barY, LABEL_W, BAR_H), Texture2D.whiteTexture);
-            GUI.color = prev;
+            var tagText = MakeText("TagLabel", tag,
+                Vector2.zero, Vector2.zero, "► FF NEWS",
+                10, FontStyle.Bold, new Color(0.5f, 0.8f, 1f), TextAnchor.MiddleCenter,
+                stretch: true);
+            tagText.GetComponent<RectTransform>().offsetMin = new Vector2(4, 2);
+            tagText.GetComponent<RectTransform>().offsetMax = new Vector2(-4, -2);
 
-            GUI.Label(new Rect(4f, barY + 2f, LABEL_W - 4f, BAR_H - 2f), "► FF NEWS", _tagStyle);
+            // Vertical separator
+            var sep = MakeRect("TickerSep", bar,
+                new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0),
+                new Vector2(LABEL_W, 0), new Vector2(1, 0));
+            MakeImage(sep, new Color(0.25f, 0.55f, 1f, 0.7f));
 
-            // Separador vertical
-            GUI.color = new Color(0.25f, 0.55f, 1f, 0.7f);
-            GUI.DrawTexture(new Rect(LABEL_W, barY, 1f, BAR_H), Texture2D.whiteTexture);
-            GUI.color = prev;
+            // Scroll area — clips text using a Mask
+            var scrollArea = MakeRect("TickerScrollArea", bar,
+                new Vector2(0, 0), new Vector2(1, 1), new Vector2(0, 0),
+                new Vector2(LABEL_W + 2f, 0), new Vector2(-(LABEL_W + 2f), 0));
+            scrollArea.gameObject.AddComponent<RectMask2D>();
 
-            if (!_scrolling) return;
+            // The text element that moves horizontally
+            _textRT = MakeRect("TickerText", scrollArea,
+                new Vector2(0, 0), new Vector2(0, 1), new Vector2(0, 0.5f),
+                new Vector2(Screen.width, 0), new Vector2(1200, 0));
+            _tickerText = MakeText("Label", _textRT,
+                Vector2.zero, Vector2.zero, "",
+                12, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft,
+                stretch: true);
 
-            // Medir ancho real la primera vez que se renderiza este mensaje
-            if (!_widthReady)
-            {
-                _textWidth = _tickerStyle.CalcSize(new GUIContent(_current)).x;
-                _widthReady = true;
-            }
-
-            // Texto con clipping al área de la cinta (a la derecha del tag)
-            GUI.BeginGroup(new Rect(LABEL_W + 2f, barY, Screen.width - LABEL_W - 2f, BAR_H));
-            var prevC = GUI.contentColor;
-            GUI.contentColor = _currentColor;
-            GUI.Label(new Rect(_x, 2f, _textWidth + 4f, BAR_H - 2f), _current, _tickerStyle);
-            GUI.contentColor = prevC;
-            GUI.EndGroup();
+            _scrollAreaWidth = Screen.width - LABEL_W - 2f;
         }
 
-        // ── Control de cola ───────────────────────────────────────────────────
+        // ── Message queue ─────────────────────────────────────────────────────
+
         private void AddMessage(string text, Color color)
         {
             _queue.Enqueue(new TickerMsg { Text = text, Color = color });
@@ -161,16 +163,30 @@ namespace FreightForwarder.UI
         {
             if (_queue.Count == 0) { _scrolling = false; return; }
 
-            var msg        = _queue.Dequeue();
-            _current       = msg.Text;
-            _currentColor  = msg.Color;
-            _x             = Screen.width - LABEL_W;   // empieza en el borde derecho visible
-            _textWidth     = Screen.width;              // estimado seguro hasta que OnGUI lo mida
-            _widthReady    = false;
-            _scrolling     = true;
+            var msg = _queue.Dequeue();
+            _current      = msg.Text;
+            _currentColor = msg.Color;
+
+            if (_tickerText != null)
+            {
+                _tickerText.text  = _current;
+                _tickerText.color = _currentColor;
+            }
+
+            // Estimate text width: ~7px per character at font size 12
+            _textWidth = _current.Length * 7f;
+            if (_textRT != null)
+                _textRT.sizeDelta = new Vector2(_textWidth + 20f, 0f);
+
+            _x       = _scrollAreaWidth;
+            _scrolling = true;
+
+            if (_textRT != null)
+                _textRT.anchoredPosition = new Vector2(_x, 0f);
         }
 
         // ── Callbacks ─────────────────────────────────────────────────────────
+
         private void OnLevelUp(int level)
             => AddMessage($"⭐  ¡Subiste al Nivel {level}!  Bonus: +${level * 100:N0}  —  Seguís creciendo en el mercado global.",
                           new Color(1f, 0.9f, 0.1f));
@@ -192,19 +208,17 @@ namespace FreightForwarder.UI
         private void OnCargoCompleted(Cargo cargo)
         {
             int profit = cargo.FinalPrice - cargo.AgentCost;
-            string route = Route(cargo);
-            AddMessage($"✅  Entrega exitosa: {route}  —  Ganancia neta: +${profit:N0}",
+            AddMessage($"✅  Entrega exitosa: {Route(cargo)}  —  Ganancia neta: +${profit:N0}",
                        new Color(0.2f, 0.95f, 0.45f));
         }
 
         private void OnCargoFailed(Cargo cargo)
         {
-            string route = Route(cargo);
             if (cargo.WasAbandonedByAgent)
-                AddMessage($"🚨  El agente abandonó la carga en tránsito: {route}  —  Penalización aplicada.",
+                AddMessage($"🚨  El agente abandonó la carga en tránsito: {Route(cargo)}  —  Penalización aplicada.",
                            new Color(1f, 0.3f, 0.1f));
             else
-                AddMessage($"❌  Carga fallida: {route}  —  El envío no llegó a destino.",
+                AddMessage($"❌  Carga fallida: {Route(cargo)}  —  El envío no llegó a destino.",
                            new Color(1f, 0.4f, 0.2f));
         }
 
@@ -215,8 +229,7 @@ namespace FreightForwarder.UI
         private void OnCargoAdded(Cargo cargo)
         {
             string type  = Constants.GetCargoTypeName(cargo.CargoType);
-            string route = Route(cargo);
-            AddMessage($"📦  Nueva oferta en el mercado: {type}  ·  {route}  —  Valor: ${cargo.DeclaredValue:N0}",
+            AddMessage($"📦  Nueva oferta en el mercado: {type}  ·  {Route(cargo)}  —  Valor: ${cargo.DeclaredValue:N0}",
                        new Color(0.6f, 0.8f, 1f));
         }
 
@@ -236,32 +249,101 @@ namespace FreightForwarder.UI
                            new Color(0.6f, 1f, 0.7f));
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
         private static string Route(Cargo c)
             => $"{c.OriginCityId.Replace('_', ' ')} → {c.DestinationCityId.Replace('_', ' ')}";
 
-        // ── Styles ────────────────────────────────────────────────────────────
-        private void EnsureStyles()
+        // ── UGUI factory helpers ──────────────────────────────────────────────
+
+        private static RectTransform GetOrCreateCanvas()
         {
-            if (_ready) return;
-            _ready = true;
-
-            _tickerStyle = new GUIStyle(GUI.skin.label)
+            if (UnityEngine.Object.FindAnyObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
             {
-                fontSize  = 12,
-                fontStyle = FontStyle.Normal,
-                alignment = TextAnchor.MiddleLeft,
-                wordWrap  = false,
-            };
-            _tickerStyle.normal.textColor = Color.white;
+                var es = new GameObject("EventSystem");
+                es.AddComponent<UnityEngine.EventSystems.EventSystem>();
+                es.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            }
 
-            _tagStyle = new GUIStyle(GUI.skin.label)
+            var existing = UnityEngine.Object.FindAnyObjectByType<Canvas>();
+            if (existing != null)
             {
-                fontSize  = 10,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-            };
-            _tagStyle.normal.textColor = new Color(0.5f, 0.8f, 1f);
+                if (existing.GetComponent<GraphicRaycaster>() == null)
+                    existing.gameObject.AddComponent<GraphicRaycaster>();
+                var existCs = existing.GetComponent<CanvasScaler>();
+                if (existCs != null)
+                {
+                    existCs.uiScaleMode        = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                    existCs.referenceResolution = new Vector2(1280, 720);
+                    existCs.matchWidthOrHeight  = 0.5f;
+                }
+                existing.sortingOrder = 10;
+                return existing.GetComponent<RectTransform>();
+            }
+
+            var cgo = new GameObject("UICanvas");
+            var c   = cgo.AddComponent<Canvas>();
+            c.renderMode   = RenderMode.ScreenSpaceOverlay;
+            c.sortingOrder = 10;
+            var cs = cgo.AddComponent<CanvasScaler>();
+            cs.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            cs.referenceResolution = new Vector2(1280, 720);
+            cs.matchWidthOrHeight  = 0.5f;
+            cgo.AddComponent<GraphicRaycaster>();
+            return cgo.GetComponent<RectTransform>();
+        }
+
+        private static RectTransform MakeRect(string name, RectTransform parent,
+            Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
+            Vector2 anchoredPos, Vector2 sizeDelta)
+        {
+            var go = new GameObject(name);
+            var rt = go.AddComponent<RectTransform>();
+            rt.SetParent(parent, false);
+            rt.anchorMin        = anchorMin;
+            rt.anchorMax        = anchorMax;
+            rt.pivot            = pivot;
+            rt.anchoredPosition = anchoredPos;
+            rt.sizeDelta        = sizeDelta;
+            return rt;
+        }
+
+        private static Image MakeImage(RectTransform rt, Color color)
+        {
+            var img = rt.gameObject.AddComponent<Image>();
+            img.color = color;
+            return img;
+        }
+
+        private static Text MakeText(string name, RectTransform parent,
+            Vector2 offset, Vector2 size, string text,
+            int fontSize, FontStyle style, Color color, TextAnchor anchor,
+            bool stretch = false)
+        {
+            RectTransform rt;
+            if (stretch)
+            {
+                var go = new GameObject(name);
+                rt = go.AddComponent<RectTransform>();
+                rt.SetParent(parent, false);
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.pivot     = new Vector2(0.5f, 0.5f);
+                rt.offsetMin = offset;
+                rt.offsetMax = size;
+            }
+            else
+            {
+                rt = MakeRect(name, parent,
+                    new Vector2(0, 1), new Vector2(0, 1), new Vector2(0, 1),
+                    offset, size);
+            }
+            var t = rt.gameObject.AddComponent<Text>();
+            t.text      = text;
+            t.fontSize  = fontSize;
+            t.fontStyle = style;
+            t.color     = color;
+            t.alignment = anchor;
+            t.font      = _font;
+            return t;
         }
     }
 }

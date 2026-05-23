@@ -96,6 +96,8 @@ namespace FreightForwarder.Models
             );
         }
 
+        public Vector2 ToVector2() => new Vector2(Latitude, Longitude);
+
         public float DistanceTo(WorldCity other)
         {
             const float R = 6371f;

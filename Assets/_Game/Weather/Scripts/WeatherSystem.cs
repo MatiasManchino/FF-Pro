@@ -70,6 +70,7 @@ namespace FreightForwarder.Weather
             if (_timer < config.updateIntervalSeconds) return;
 
             _timeOffset += config.noiseTimeSpeed * _timer;
+            if (_timeOffset > 1e6f) _timeOffset -= 1e6f;
             _timer = 0f;
 
             Tick();

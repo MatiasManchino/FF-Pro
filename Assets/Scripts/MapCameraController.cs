@@ -109,7 +109,7 @@ public class MapCameraController : MonoBehaviour
         yield return null;
         
         _allCities.Clear();
-        _allCities.AddRange(Object.FindObjectsByType<CityMarker>(FindObjectsSortMode.None));
+        _allCities.AddRange(FindObjectsByType<CityMarker>(FindObjectsInactive.Exclude));
         
         _allCities.Sort((a, b) => a.cityName.CompareTo(b.cityName));
         
@@ -369,6 +369,7 @@ public class MapCameraController : MonoBehaviour
 
         if (Input.GetMouseButtonDown(0))
         {
+            if (IsMouseOverUI()) return;
             _dragging     = true;
             _didDrag      = false;
             _prevMousePx  = Input.mousePosition;
@@ -669,18 +670,10 @@ public class MapCameraController : MonoBehaviour
     }
 
     // ── Detección de UI ──────────────────────────────────────────────────────
-    private bool IsMouseOverUI()
+    private static bool IsMouseOverUI()
     {
-        float mouseY = Screen.height - Input.mousePosition.y;
-        
-        // Los botones de velocidad están en la parte superior (y entre 8 y 40)
-        if (mouseY <= 50f) return true;
-        
-        // El botón FIJAR está en la esquina superior derecha
-        float mouseX = Input.mousePosition.x;
-        if (mouseY <= 50f && mouseX >= Screen.width - 100f) return true;
-        
-        return false;
+        var es = UnityEngine.EventSystems.EventSystem.current;
+        return es != null && es.IsPointerOverGameObject();
     }
     public string CurrentCityName => 
         (_currentCityIndex >= 0 && _currentCityIndex < _allCities.Count) 

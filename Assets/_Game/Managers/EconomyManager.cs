@@ -22,7 +22,6 @@ namespace FreightForwarder.Managers
         public event Action<int> OnReputationChanged;
         public event Action<int> OnLevelUp;
         public event Action<int, int> OnXPGained;
-        public event Action OnGameOver;
 
         protected override void OnAwake()
         {

@@ -28,12 +28,14 @@ public class CityMarker : MonoBehaviour
     public float labelFontSize = 12;     // Reducido de 24
 
     private Renderer          rend;
+    private Material          _rendMaterial;
     private DaylightVerifier  verifier;
     private GameObject        _labelContainer;
     private TextMesh          _labelText;
     private MeshRenderer      _bgRenderer;
     private Material          _bgMaterial;
     private Transform         _cameraTransform;
+    private Transform         _earthTransform;
     private Coroutine         _fadeRoutine;
 
     private DateTime lastSampledUtc;
@@ -48,11 +50,13 @@ public class CityMarker : MonoBehaviour
     {
         if (WorldMap.Instance == null) { Debug.LogError("[CityMarker] WorldMap.Instance no disponible."); enabled = false; return; }
         rend = GetComponent<Renderer>();
+        _rendMaterial    = rend.material;
+        _earthTransform  = WorldMap.Instance.transform;
         PlaceOnSurface();
         CreateLabel();
-        transform.SetParent(WorldMap.Instance.transform, worldPositionStays: true);
+        transform.SetParent(_earthTransform, worldPositionStays: true);
         _cameraTransform = Camera.main?.transform;
-        verifier = FindFirstObjectByType<DaylightVerifier>();
+        verifier = FindAnyObjectByType<DaylightVerifier>();
         if (verifier != null) verifier.RegisterCity(this);
         if (!string.IsNullOrEmpty(cityName)) _registry[cityName] = this;
     }
@@ -141,10 +145,10 @@ public class CityMarker : MonoBehaviour
         float scale = d * labelScale;
         _labelContainer.transform.localScale = new Vector3(scale, scale, 1f);
 
-        if (WorldMap.Instance != null)
+        if (_earthTransform != null)
         {
-            Vector3 toLabel = (_labelContainer.transform.position - WorldMap.Instance.transform.position).normalized;
-            Vector3 toCamera = (_cameraTransform.position - WorldMap.Instance.transform.position).normalized;
+            Vector3 toLabel = (_labelContainer.transform.position - _earthTransform.position).normalized;
+            Vector3 toCamera = (_cameraTransform.position - _earthTransform.position).normalized;
             float dot = Vector3.Dot(toLabel, toCamera);
 
             float alpha = dot > 0.05f ? 1f : 0f;
@@ -202,20 +206,20 @@ public class CityMarker : MonoBehaviour
 
     void UpdateDaylightColor()
     {
-        if (rend != null) rend.material.SetFloat("_Brightness", isInDaylight ? 1.2f : 0.5f);
+        if (_rendMaterial != null) _rendMaterial.SetFloat("_Brightness", isInDaylight ? 1.2f : 0.5f);
     }
 
     public bool HasCompletedFirstDay() => firstDayCompleted;
 
     void OnMouseEnter()
     {
-        if (rend != null) rend.material.SetFloat("_Selected", 1f);
+        if (_rendMaterial != null) _rendMaterial.SetFloat("_Selected", 1f);
         if (_labelContainer != null) { if (_fadeRoutine != null) StopCoroutine(_fadeRoutine); _fadeRoutine = StartCoroutine(FadeIn()); }
     }
 
     void OnMouseExit()
     {
-        if (rend != null) rend.material.SetFloat("_Selected", 0f);
+        if (_rendMaterial != null) _rendMaterial.SetFloat("_Selected", 0f);
         if (_labelContainer != null) { if (_fadeRoutine != null) StopCoroutine(_fadeRoutine); _fadeRoutine = StartCoroutine(FadeOut()); }
     }
 

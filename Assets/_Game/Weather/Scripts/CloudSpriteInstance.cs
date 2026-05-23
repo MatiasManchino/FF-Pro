@@ -16,11 +16,14 @@ namespace FreightForwarder.Weather
         public float DriftLat;
         public bool  IsStorm;
 
-        private Material _mat;
-        private float    _currentAlpha;
-        private float    _age;
-        private float    _lifetime;
-        private bool     _despawning;
+        private Material       _mat;
+        private Transform      _earthTransform;
+        private float          _localR;
+        private SunController  _sun;
+        private float     _currentAlpha;
+        private float     _age;
+        private float     _lifetime;
+        private bool      _despawning;
 
         private float _baseScale;
         private float _sizeFreq;
@@ -71,6 +74,20 @@ namespace FreightForwarder.Weather
             _stretchX   = 1f;
             _stretchY   = 1f;
 
+            // Cache earth transform and localR once — they never change at runtime.
+            if (WorldMap.Instance != null)
+            {
+                float earthR    = WorldMap.Instance.earthRadius;
+                _localR         = (earthR + CLOUD_HEIGHT) / (earthR * 2f);
+                _earthTransform = WorldMap.Instance.transform;
+            }
+            else
+            {
+                _localR         = (1000f + CLOUD_HEIGHT) / 2000f;
+                _earthTransform = null;
+            }
+            _sun = SunController.Instance;
+
             // Pool: reutilizar el material si ya existe en lugar de crear uno nuevo cada vez.
             if (_mat == null)
             {
@@ -99,10 +116,10 @@ namespace FreightForwarder.Weather
                 ? Mathf.Clamp(TimeManager.Instance.CurrentSpeedMultiplier, 0f, 100f)
                 : 1f;
 
-            // Rebotar en los límites polares antes de aplicar deriva:
-            // sin esto el DriftLat fijo acumula todas las nubes en ±80° para siempre
-            if (Lat >  70f) DriftLat = -Mathf.Abs(DriftLat);
-            if (Lat < -70f) DriftLat =  Mathf.Abs(DriftLat);
+            // Rebotar cerca de los polos para que los sprites no se acumulen en el límite.
+            // 82° permite que los sprites lleguen y moren en los polos (alta cobertura polar real).
+            if (Lat >  82f) DriftLat = -Mathf.Abs(DriftLat);
+            if (Lat < -82f) DriftLat =  Mathf.Abs(DriftLat);
 
             // Circulación atmosférica + turbulencia local escaladas al tiempo de juego
             GetAtmosphericDrift(Lat, out float baseLon, out float baseLat);
@@ -110,7 +127,7 @@ namespace FreightForwarder.Weather
             Lon += (baseLon + DriftLon) * dt;
             if (Lon >  180f) Lon -= 360f;
             if (Lon < -180f) Lon += 360f;
-            Lat = Mathf.Clamp(Lat + (baseLat + DriftLat) * dt, -80f, 80f);
+            Lat = Mathf.Clamp(Lat + (baseLat + DriftLat) * dt, -88f, 88f);
 
             // Deformación lenta hacia el sentido de traslado
             float dLon = baseLon + DriftLon;
@@ -123,6 +140,9 @@ namespace FreightForwarder.Weather
             _stretchX = Mathf.Lerp(_stretchX, targetStretchX, Time.deltaTime * 0.4f);
             _stretchY = Mathf.Lerp(_stretchY, targetStretchY, Time.deltaTime * 0.4f);
             _mat?.SetVector(PropStretchDir, new Vector4(nX, nY, 0f, 0f));
+
+            Vector3 dir = LatLonToDir(Lat, Lon);
+            UpdateWorldPosition(dir);
 
             // Alpha con fade in/out
             const float FADE_IN  = 2f;
@@ -139,8 +159,7 @@ namespace FreightForwarder.Weather
             float alphaBreath = 1f + Mathf.Sin(_age * _alphaFreq + _alphaPhase) * 0.12f;
             _mat?.SetFloat(PropAlpha, Mathf.Clamp01(_currentAlpha * alphaBreath));
 
-            // Día / noche: dot product entre dirección de la nube y la dirección del sol.
-            // smoothstep sobre una zona de ±12° alrededor del terminador → transición gradual.
+            // Día / noche
             _mat?.SetFloat(PropNightFactor, ComputeDaylightFactor());
 
             // Respiración de tamaño: ±9 % de la escala base, período 63–157 s por sprite
@@ -150,8 +169,6 @@ namespace FreightForwarder.Weather
                 _baseScale * sizeBreath * _stretchY,
                 1f);
 
-            UpdateWorldPosition();
-
             // Al morir, devolver al pool en lugar de destruir el GameObject
             if (Dead) { CloudRenderer.Instance?.Release(this); return; }
         }
@@ -160,45 +177,24 @@ namespace FreightForwarder.Weather
 
         private float ComputeDaylightFactor()
         {
-            if (SunController.Instance == null || WorldMap.Instance == null) return 1f;
-
-            // Reproducir exactamente cómo CityMarker detecta día/noche:
-            // calcular la posición world del sprite (igual que UpdateWorldPosition) y
-            // pasarla a GetSunAngleAtPosition → ángulo en grados sobre/bajo el horizonte.
-            Vector3 dir      = LatLonToDir(Lat, Lon);
-            float   localR   = (WorldMap.Instance.earthRadius + CLOUD_HEIGHT)
-                               / (WorldMap.Instance.earthRadius * 2f);
-            Vector3 worldPos = WorldMap.Instance.transform.TransformPoint(dir * localR);
-
-            float angle = SunController.Instance.GetSunAngleAtPosition(
-                              worldPos, WorldMap.Instance.transform.position);
-
-            // Normalizar el ángulo a [0,1] y luego aplicar la curva suave.
-            // Mathf.SmoothStep(a,b,t) interpola entre a y b, NO es el smoothstep de HLSL.
-            // InverseLerp convierte el rango [-20°,+20°] → [0,1] antes de pasarlo.
+            if (_sun == null || _earthTransform == null) return 1f;
+            float angle = _sun.GetSunAngleAtPosition(transform.position, _earthTransform.position);
             return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-20f, 20f, angle));
         }
 
         // ── Posición + orientación tangente ───────────────────────────────────
 
-        private void UpdateWorldPosition()
+        private void UpdateWorldPosition(Vector3 dir)
         {
-            if (WorldMap.Instance == null) return;
+            if (_earthTransform == null) return;
 
-            Vector3 dir    = LatLonToDir(Lat, Lon);
-            float   earthR = WorldMap.Instance.earthRadius;
-            float   localR = (earthR + CLOUD_HEIGHT) / (earthR * 2f);
+            transform.position = _earthTransform.TransformPoint(dir * _localR);
 
-            transform.position = WorldMap.Instance.transform.TransformPoint(dir * localR);
-
-            // Tangent-aligned: el quad yace plano sobre la superficie del globo.
-            // forward(+Z) apunta hacia el espacio → frente del quad visible desde fuera.
-            // El depth buffer oculta automáticamente las nubes del lado trasero.
-            Vector3 worldOutward = (transform.position - WorldMap.Instance.transform.position).normalized;
-            Vector3 northRef     = WorldMap.Instance.transform.up;
+            Vector3 worldOutward = (transform.position - _earthTransform.position).normalized;
+            Vector3 northRef     = _earthTransform.up;
             Vector3 northTangent = Vector3.ProjectOnPlane(northRef, worldOutward).normalized;
             if (northTangent.sqrMagnitude < 0.01f)
-                northTangent = Vector3.ProjectOnPlane(WorldMap.Instance.transform.right, worldOutward).normalized;
+                northTangent = Vector3.ProjectOnPlane(_earthTransform.right, worldOutward).normalized;
             transform.rotation = Quaternion.LookRotation(worldOutward, northTangent);
         }
 

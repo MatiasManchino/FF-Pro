@@ -11,7 +11,6 @@ namespace FreightForwarder.Managers
         private List<GameEvent> _eventPool;
 
         public event Action<GameEvent, Cargo> OnEventTriggered;
-        public event Action<GameEvent, Cargo> OnEventResolved;
 
         protected override void OnAwake()
         {
@@ -164,6 +163,7 @@ namespace FreightForwarder.Managers
 
         // Probabilidad base de que ocurra ALGÚN evento en un día dado
         private const float DAILY_EVENT_CHANCE = 0.12f;
+        private readonly List<GameEvent> _applicable = new List<GameEvent>();
 
         private void ProcessDailyEvents()
         {
@@ -188,15 +188,15 @@ namespace FreightForwarder.Managers
                 string stage = GetCurrentStage(cargo);
 
                 // Reunir eventos aplicables y elegir uno al azar
-                var applicable = new List<GameEvent>();
+                _applicable.Clear();
                 foreach (var evt in _eventPool)
                 {
                     if (evt.AppliesToCargo(cargo, stage, currentMonth, currentDayOfMonth, agentTrust))
-                        applicable.Add(evt);
+                        _applicable.Add(evt);
                 }
-                if (applicable.Count == 0) continue;
+                if (_applicable.Count == 0) continue;
 
-                var chosen = applicable[UnityEngine.Random.Range(0, applicable.Count)];
+                var chosen = _applicable[UnityEngine.Random.Range(0, _applicable.Count)];
                 ApplyEvent(chosen, cargo, currentDay);
             }
         }

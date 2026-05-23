@@ -27,6 +27,13 @@ namespace FreightForwarder.Weather
         private float _lon;
         private bool  _active;
 
+        private Transform _earthTransform;
+        private float     _localR;
+
+        private float _lastAlpha = -1f;
+        private float _lastBuild = -1f;
+        private float _lastRot   = float.NaN;
+
         private static readonly int PropAlpha   = Shader.PropertyToID("_Alpha");
         private static readonly int PropBuild   = Shader.PropertyToID("_BuildProgress");
         private static readonly int PropRot     = Shader.PropertyToID("_Rotation");
@@ -58,6 +65,13 @@ namespace FreightForwarder.Weather
 
             _go.transform.localScale = Vector3.one * spriteScale;
             _go.SetActive(false);
+
+            if (WorldMap.Instance != null)
+            {
+                float earthR    = WorldMap.Instance.earthRadius;
+                _localR         = (earthR + 70f) / (earthR * 2f);
+                _earthTransform = WorldMap.Instance.transform;
+            }
         }
 
         // ── Activar / desactivar ──────────────────────────────────────────────
@@ -119,9 +133,9 @@ namespace FreightForwarder.Weather
                 }
             }
 
-            _mat.SetFloat(PropAlpha, _alpha);
-            _mat.SetFloat(PropBuild, _buildProgress);
-            _mat.SetFloat(PropRot,   _rotation);
+            if (_alpha         != _lastAlpha) { _mat.SetFloat(PropAlpha, _alpha);         _lastAlpha = _alpha; }
+            if (_buildProgress != _lastBuild) { _mat.SetFloat(PropBuild, _buildProgress); _lastBuild = _buildProgress; }
+            if (_rotation      != _lastRot)   { _mat.SetFloat(PropRot,   _rotation);      _lastRot   = _rotation; }
 
             UpdateWorldPosition();
         }
@@ -130,21 +144,18 @@ namespace FreightForwarder.Weather
 
         private void UpdateWorldPosition()
         {
-            if (WorldMap.Instance == null) return;
+            if (_earthTransform == null) return;
 
-            Vector3 dir    = CloudSpriteInstance.LatLonToDir(_lat, _lon);
-            float   earthR = WorldMap.Instance.earthRadius;
-            float   localR = (earthR + 70f) / (earthR * 2f);
-
-            Vector3 worldPos = WorldMap.Instance.transform.TransformPoint(dir * localR);
+            Vector3 dir      = CloudSpriteInstance.LatLonToDir(_lat, _lon);
+            Vector3 worldPos = _earthTransform.TransformPoint(dir * _localR);
             _go.transform.position = worldPos;
 
             // Tangent-aligned: el huracán yace plano sobre el océano (vista satelital)
-            Vector3 worldOutward = (worldPos - WorldMap.Instance.transform.position).normalized;
-            Vector3 northRef     = WorldMap.Instance.transform.up;
+            Vector3 worldOutward = (worldPos - _earthTransform.position).normalized;
+            Vector3 northRef     = _earthTransform.up;
             Vector3 northTangent = Vector3.ProjectOnPlane(northRef, worldOutward).normalized;
             if (northTangent.sqrMagnitude < 0.01f)
-                northTangent = Vector3.ProjectOnPlane(WorldMap.Instance.transform.right, worldOutward).normalized;
+                northTangent = Vector3.ProjectOnPlane(_earthTransform.right, worldOutward).normalized;
             _go.transform.rotation = Quaternion.LookRotation(worldOutward, northTangent);
         }
 

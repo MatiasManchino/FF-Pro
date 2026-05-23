@@ -8,19 +8,20 @@ namespace FreightForwarder.Managers
 {
     public class ClientManager : Singleton<ClientManager>
     {
-        private List<Client> _activeClients;
-        private List<string> _companyNamePool;
+        private List<Client>               _activeClients;
+        private Dictionary<string, Client> _clientIndex = new Dictionary<string, Client>();
+        private List<string>               _companyNamePool;
 
         public IReadOnlyList<Client> ActiveClients => _activeClients;
 
         public event Action<Client> OnClientAdded;
         public event Action<Client> OnClientBlacklisted;
         public event Action<Client> OnClientBecameVip;
-        public event Action<Client, Quote> OnNegotiationResult;
 
         protected override void OnAwake()
         {
             _activeClients = new List<Client>();
+            _clientIndex   = new Dictionary<string, Client>();
             InitializeCompanyNames();
         }
 
@@ -55,7 +56,6 @@ namespace FreightForwarder.Managers
 
         private void ProcessDailyUpdates()
         {
-            int currentDay = FFTimeManager.Instance?.CurrentDay ?? 1;
             foreach (var client in _activeClients)
             {
                 client.DecayAnger();
@@ -92,6 +92,7 @@ namespace FreightForwarder.Managers
                 name = GetRandomCompanyName();
             var client = new Client(name, type);
             _activeClients.Add(client);
+            _clientIndex[client.Id] = client;
             OnClientAdded?.Invoke(client);
             return client;
         }
@@ -190,11 +191,7 @@ namespace FreightForwarder.Managers
         // ═══════════════════════════════════
 
         public Client GetClientById(string id)
-        {
-            foreach (var c in _activeClients)
-                if (c.Id == id) return c;
-            return null;
-        }
+            => _clientIndex.TryGetValue(id, out var c) ? c : null;
 
         public Constants.ClientType GetRandomClientType()
         {

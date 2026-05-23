@@ -44,6 +44,9 @@ namespace FreightForwarder.Weather
         // Una marca por región: cuántos sprites tiene actualmente
         private readonly int[] _regionSpriteCount = new int[REGION_W * REGION_H];
 
+        // Orden de visita de regiones — reutilizado en cada Refresh para evitar allocations
+        private readonly int[] _regionOrder = new int[REGION_W * REGION_H];
+
         // Malla subdividida compartida (generada una vez, usada por todos los sprites)
         private static Mesh _sharedCloudMesh;
 
@@ -138,13 +141,13 @@ namespace FreightForwarder.Weather
 
             // Pool: los sprites se devuelven solos vía Release() — no hay referencias nulas
 
-            // Rellenar hasta el mínimo con distribución uniforme por latitud
+            // Rellenar hasta el mínimo con distribución uniforme por latitud (incluye polos)
             if (_sprites.Count < MIN_SPRITES)
             {
                 int fill = MIN_SPRITES - _sprites.Count;
                 for (int i = 0; i < fill && _sprites.Count < MAX_SPRITES; i++)
                 {
-                    float lat = Mathf.Lerp(-65f, 65f, (i + Random.value) / fill);
+                    float lat = Mathf.Lerp(-88f, 88f, (i + Random.value) / fill);
                     float lon = Random.Range(-180f, 180f);
                     SpawnSprite(lat, lon, Random.Range(0.35f, 0.65f), false);
                 }
@@ -188,12 +191,11 @@ namespace FreightForwarder.Weather
 
             // Evaluar el grid y spawnar / despawnar
             // Orden aleatorio para que los sprites no se concentren siempre en las mismas regiones
-            var regionOrder = new int[REGION_W * REGION_H];
-            for (int i = 0; i < regionOrder.Length; i++) regionOrder[i] = i;
-            for (int i = regionOrder.Length - 1; i > 0; i--)
+            for (int i = 0; i < _regionOrder.Length; i++) _regionOrder[i] = i;
+            for (int i = _regionOrder.Length - 1; i > 0; i--)
             {
                 int j = Random.Range(0, i + 1);
-                int t = regionOrder[i]; regionOrder[i] = regionOrder[j]; regionOrder[j] = t;
+                int t = _regionOrder[i]; _regionOrder[i] = _regionOrder[j]; _regionOrder[j] = t;
             }
 
             bool cycloneFound  = false;
@@ -201,7 +203,7 @@ namespace FreightForwarder.Weather
             float cycloneStr   = 0f;
             int   regionsAbove = 0;
 
-            foreach (int ri in regionOrder)
+            foreach (int ri in _regionOrder)
             {
                 int rx = ri % REGION_W;
                 int ry = ri / REGION_W;
@@ -218,7 +220,9 @@ namespace FreightForwarder.Weather
                     cycloneStr   = avgCyclone;
                     cycloneLat   = centerLat;
                     cycloneLon   = centerLon;
-                    cycloneFound = avgCyclone > 0.15f;
+                    // Una sola celda con ciclón en región de 16 celdas da avg=0.0625.
+                // 0.06 es suficiente para detectar un ciclón individual.
+                cycloneFound = avgCyclone > 0.06f;
                 }
 
                 // Nubes y ciclones coexisten: el ciclón agrega el sprite de huracán ENCIMA
@@ -239,8 +243,7 @@ namespace FreightForwarder.Weather
 
                 // Spawnar el cluster completo de una vez (no de a 1 por Refresh)
                 bool isStormSpawn = avgStorm > STORM_THRESHOLD || avgCyclone > 0.4f;
-                // Evitar spawns en latitudes polares donde el clamp ±80 atrapa sprites
-                float spawnLat = Mathf.Clamp(centerLat, -62f, 62f);
+                float spawnLat = Mathf.Clamp(centerLat, -88f, 88f);
                 int need = Mathf.Min(desired - current, MAX_SPRITES - _sprites.Count);
                 for (int s = 0; s < need; s++)
                     SpawnSprite(spawnLat, centerLon, avgCloud, isStormSpawn);
@@ -257,8 +260,8 @@ namespace FreightForwarder.Weather
                 int fill = MIN_SPRITES - _sprites.Count;
                 for (int i = 0; i < fill && _sprites.Count < MAX_SPRITES; i++)
                 {
-                    // Distribución uniforme por latitud usando estratificación
-                    float lat = Mathf.Lerp(-65f, 65f, (i + Random.value) / fill);
+                    // Distribución uniforme por latitud usando estratificación (incluye polos)
+                    float lat = Mathf.Lerp(-88f, 88f, (i + Random.value) / fill);
                     float lon = Random.Range(-180f, 180f);
                     SpawnSprite(lat, lon, Random.Range(0.35f, 0.65f), false);
                 }
@@ -297,7 +300,7 @@ namespace FreightForwarder.Weather
 
             float jitterLat = Random.Range(-4f, 4f);
             float jitterLon = Random.Range(-6f, 6f);
-            float lat = Mathf.Clamp(centerLat + jitterLat, -80f, 80f);
+            float lat = Mathf.Clamp(centerLat + jitterLat, -88f, 88f);
             float lon = centerLon + jitterLon;
 
             float alpha    = Random.Range(0.2f, 0.7f);

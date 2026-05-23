@@ -5,7 +5,8 @@ namespace FreightForwarder.Models
 {
     /// <summary>
     /// Base de datos de ciudades logísticas del juego.
-    /// Los IDs y coordenadas están alineados con los CityMarker spawneados en GameBootstrapper.
+    /// Coordenadas alineadas con SpawnCity() en GameBootstrapper
+    /// (sistema del mapa: lon_mapa = lon_real + 180°, normalizado a ±180°).
     /// </summary>
     public static class CityDatabase
     {
@@ -13,54 +14,51 @@ namespace FreightForwarder.Models
 
         public static void Initialize()
         {
-            if (AllCities != null) return; // Ya inicializado
+            if (AllCities != null) return;
 
             AllCities = new Dictionary<string, WorldCity>();
 
-            // Coordenadas idénticas a las de GameBootstrapper.SpawnCities()
-            // Tier 0 = desbloqueada al inicio
-
             // América del Sur
-            Add("buenos_aires", "Buenos Aires", "Argentina",       "South America", -38.46f, -58.38f, true,  true,  true,  true,  true,  0,     0,  60);
-            Add("sao_paulo",    "São Paulo",     "Brasil",          "South America", -24.90f, -46.63f, true,  true,  true,  true,  false, 5000,  1,  70);
-            Add("valparaiso",   "Valparaíso",    "Chile",           "South America", -36.64f, -71.63f, true,  false, true,  false, false, 6000,  2,  40);
-            Add("cartagena",    "Cartagena",     "Colombia",        "South America",  10.36f, -74.51f, true,  true,  false, false, false, 8000,  3,  50);
+            Add("buenos_aires", "Buenos Aires", "Argentina",       "South America",  -34.61f,  121.62f, true,  true,  true,  true,  true,  0,     0,  60);
+            Add("sao_paulo",    "São Paulo",     "Brasil",          "South America",  -23.55f,  133.37f, true,  true,  true,  true,  false, 5000,  1,  70);
+            Add("valparaiso",   "Valparaíso",    "Chile",           "South America",  -33.05f,  108.37f, true,  false, true,  false, false, 6000,  2,  40);
+            Add("cartagena",    "Cartagena",     "Colombia",        "South America",   10.39f,  104.49f, true,  true,  false, false, false, 8000,  3,  50);
 
             // América del Norte y Central
-            Add("miami",        "Miami",         "Estados Unidos",  "North America",  29.71f, -79.98f, true,  true,  true,  true,  false, 8000,  1,  80);
-            Add("los_angeles",  "Los Ángeles",   "Estados Unidos",  "North America",  39.09f,-118.24f, true,  true,  true,  true,  false, 15000, 4,  85);
-            Add("new_york",     "New York",      "Estados Unidos",  "North America",  46.57f, -74.00f, true,  true,  true,  true,  false, 12000, 3,  90);
-            Add("houston",      "Houston",       "Estados Unidos",  "North America",  34.22f, -95.37f, true,  true,  true,  false, false, 10000, 3,  65);
-            Add("panama",       "Panamá",        "Panamá",          "North America",  10.78f, -79.50f, true,  true,  false, true,  false, 7000,  2,  55);
+            Add("miami",        "Miami",         "Estados Unidos",  "North America",   25.77f,   99.81f, true,  true,  true,  true,  false, 8000,  1,  80);
+            Add("los_angeles",  "Los Ángeles",   "Estados Unidos",  "North America",   34.05f,   61.76f, true,  true,  true,  true,  false, 15000, 4,  85);
+            Add("new_york",     "New York",      "Estados Unidos",  "North America",   40.71f,  105.99f, true,  true,  true,  true,  false, 12000, 3,  90);
+            Add("houston",      "Houston",       "Estados Unidos",  "North America",   29.76f,   84.63f, true,  true,  true,  false, false, 10000, 3,  65);
+            Add("panama",       "Panamá",        "Panamá",          "North America",    8.99f,  100.48f, true,  true,  false, true,  false, 7000,  2,  55);
 
             // Europa Occidental
-            Add("rotterdam",    "Rotterdam",     "Países Bajos",    "Europe",         59.23f,   4.48f, true,  true,  true,  true,  false, 10000, 2,  85);
-            Add("hamburg",      "Hamburgo",      "Alemania",        "Europe",         61.07f,   9.99f, true,  true,  true,  true,  false, 12000, 3,  80);
-            Add("antwerp",      "Amberes",       "Bélgica",         "Europe",         58.44f,   4.40f, true,  true,  true,  false, false, 18000, 5,  82);
-            Add("london",       "London",        "Reino Unido",     "Europe",         58.77f,  -0.13f, true,  true,  false, true,  false, 13000, 3,  88);
-            Add("barcelona",    "Barcelona",     "España",          "Europe",         47.34f,   2.16f, true,  true,  true,  false, false, 11000, 4,  70);
-            Add("marseille",    "Marsella",      "Francia",         "Europe",         49.50f,   5.37f, true,  true,  true,  false, false, 11000, 4,  65);
+            Add("rotterdam",    "Rotterdam",     "Países Bajos",    "Europe",          51.92f, -175.52f, true,  true,  true,  true,  false, 10000, 2,  85);
+            Add("hamburg",      "Hamburgo",      "Alemania",        "Europe",          53.55f, -170.01f, true,  true,  true,  true,  false, 12000, 3,  80);
+            Add("antwerp",      "Amberes",       "Bélgica",         "Europe",          51.22f, -175.60f, true,  true,  true,  false, false, 18000, 5,  82);
+            Add("london",       "London",        "Reino Unido",     "Europe",          51.51f,  179.87f, true,  true,  false, true,  false, 13000, 3,  88);
+            Add("barcelona",    "Barcelona",     "España",          "Europe",          41.39f, -177.84f, true,  true,  true,  false, false, 11000, 4,  70);
+            Add("marseille",    "Marsella",      "Francia",         "Europe",          43.30f, -174.63f, true,  true,  true,  false, false, 11000, 4,  65);
 
             // África y Mediterráneo
-            Add("port_said",    "Port Said",     "Egipto",          "Africa",         35.91f,  32.28f, true,  false, false, true,  false, 9000,  3,  60);
-            Add("casablanca",   "Casablanca",    "Marruecos",       "Africa",         38.55f,  -7.59f, true,  true,  false, false, false, 9000,  4,  55);
+            Add("port_said",    "Port Said",     "Egipto",          "Africa",          31.26f, -147.72f, true,  false, false, true,  false, 9000,  3,  60);
+            Add("casablanca",   "Casablanca",    "Marruecos",       "Africa",          33.59f,  172.38f, true,  true,  false, false, false, 9000,  4,  55);
 
             // Medio Oriente
-            Add("dubai",        "Dubái",         "Emiratos Árabes", "Middle East",    29.17f,  55.30f, true,  true,  false, true,  false, 13000, 3,  75);
-            Add("jeddah",       "Jeddah",        "Arabia Saudita",  "Middle East",    24.93f,  39.17f, true,  true,  false, false, false, 11000, 4,  60);
+            Add("dubai",        "Dubái",         "Emiratos Árabes", "Middle East",     25.20f, -124.73f, true,  true,  false, true,  false, 13000, 3,  75);
+            Add("jeddah",       "Jeddah",        "Arabia Saudita",  "Middle East",     21.49f, -140.83f, true,  true,  false, false, false, 11000, 4,  60);
 
             // Asia del Sur
-            Add("mumbai",       "Mumbai",        "India",           "Asia",           22.17f,  72.88f, true,  true,  true,  true,  false, 10000, 3,  80);
-            Add("singapore",    "Singapur",      "Singapur",        "Asia",            2.14f, 103.82f, true,  true,  false, true,  false, 10000, 2,  90);
+            Add("mumbai",       "Mumbai",        "India",           "Asia",            19.08f, -107.12f, true,  true,  true,  true,  false, 10000, 3,  80);
+            Add("singapore",    "Singapur",      "Singapur",        "Asia",             1.35f,  -76.18f, true,  true,  false, true,  false, 10000, 2,  90);
 
             // Asia del Este
-            Add("shanghai",     "Shanghái",      "China",           "Asia",           35.88f, 121.47f, true,  true,  true,  true,  false, 10000, 2,  95);
-            Add("hong_kong",    "Hong Kong",     "China",           "Asia",           25.82f, 114.17f, true,  true,  false, true,  false, 12000, 3,  88);
-            Add("busan",        "Busan",         "Corea del Sur",   "Asia",           40.24f, 129.04f, true,  true,  false, false, false, 13000, 4,  70);
-            Add("tokyo",        "Tokio",         "Japón",           "Asia",           40.90f, 139.69f, true,  true,  false, true,  false, 15000, 5,  85);
+            Add("shanghai",     "Shanghái",      "China",           "Asia",            31.23f,  -58.53f, true,  true,  true,  true,  false, 10000, 2,  95);
+            Add("hong_kong",    "Hong Kong",     "China",           "Asia",            22.32f,  -65.83f, true,  true,  false, true,  false, 12000, 3,  88);
+            Add("busan",        "Busan",         "Corea del Sur",   "Asia",            35.10f,  -50.96f, true,  true,  false, false, false, 13000, 4,  70);
+            Add("tokyo",        "Tokio",         "Japón",           "Asia",            35.68f,  -40.31f, true,  true,  false, true,  false, 15000, 5,  85);
 
             // Oceanía
-            Add("sydney",       "Sídney",        "Australia",       "Oceania",       -37.62f, 151.21f, true,  true,  true,  true,  false, 18000, 6,  75);
+            Add("sydney",       "Sídney",        "Australia",       "Oceania",        -33.87f,  -28.79f, true,  true,  true,  true,  false, 18000, 6,  75);
         }
 
         private static void Add(string id, string name, string country, string continent,
@@ -101,9 +99,6 @@ namespace FreightForwarder.Models
             return result;
         }
 
-        /// <summary>
-        /// Busca una ciudad por su nombre de display (para conectar con CityMarker.cityName).
-        /// </summary>
         public static WorldCity GetCityByDisplayName(string displayName)
         {
             if (AllCities == null) Initialize();

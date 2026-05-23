@@ -4,34 +4,25 @@ namespace FreightForwarder.Utils
 {
     public abstract class Singleton<T> : MonoBehaviour where T : MonoBehaviour
     {
-        private static T _instance;
-        private static readonly object _lock = new object();
+        private static T    _instance;
         private static bool _applicationIsQuitting = false;
 
         public static T Instance
         {
             get
             {
-                if (_applicationIsQuitting)
+                if (_applicationIsQuitting) return null;
+                if (_instance == null)
                 {
-                    Debug.LogWarning($"[Singleton] Instancia de {typeof(T)} solicitada mientras la app se cierra.");
-                    return null;
-                }
-
-                lock (_lock)
-                {
+                    _instance = FindAnyObjectByType<T>();
                     if (_instance == null)
                     {
-                        _instance = FindAnyObjectByType<T>();
-                        if (_instance == null)
-                        {
-                            GameObject singletonObject = new GameObject(typeof(T).Name);
-                            _instance = singletonObject.AddComponent<T>();
-                            DontDestroyOnLoad(singletonObject);
-                        }
+                        var go = new GameObject(typeof(T).Name);
+                        _instance = go.AddComponent<T>();
+                        DontDestroyOnLoad(go);
                     }
-                    return _instance;
                 }
+                return _instance;
             }
         }
 
