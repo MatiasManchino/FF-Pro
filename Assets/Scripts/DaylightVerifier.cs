@@ -70,7 +70,9 @@ public class DaylightVerifier : MonoBehaviour
             return;
         }
 
-        Debug.Log($"[DaylightVerifier] Iniciado. Referencia: fórmula astronómica por latitud. Tol base ±{toleranceHours}h");
+        Debug.Log($"[DaylightVerifier] Iniciado. Referencia: fórmula astronómica. Tol base ±{toleranceHours}h — " +
+                  $"esperando registro de ciudades y primer rollover UTC...");
+        // Note: cities register in their own Start() — count will be >0 once scene is live
     }
 
     private int  _dayCount;
@@ -91,7 +93,7 @@ public class DaylightVerifier : MonoBehaviour
         }
 
         _dayCount++;
-        if (showDebugInfo && _dayCount % 7 == 0)
+        if (showDebugInfo && (_dayCount <= 3 || _dayCount % 7 == 0))
             Debug.Log($"[DaylightVerifier] Día {_dayCount} — {GetStatistics()}");
     }
 
