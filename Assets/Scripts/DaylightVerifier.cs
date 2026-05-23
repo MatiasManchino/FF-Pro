@@ -26,7 +26,10 @@ public class DaylightVerifier : MonoBehaviour
 
     [Tooltip("Mostrar también los días que pasan la verificación (no solo las violaciones).")]
     public bool showAllChecks = false;
- 
+
+    [Tooltip("Tolerancia dinámica según latitud (cubre variación intra-mes real en ciudades de alta latitud).")]
+    public bool useLatitudinalTolerance = true;
+
     [Header("Estado (solo lectura)")]
     [SerializeField] private float complianceRate = 100f;
     [SerializeField] private int   totalChecks;
@@ -83,17 +86,30 @@ public class DaylightVerifier : MonoBehaviour
                   $"Tolerancia: ±{toleranceHours}h");
     }
  
-    private int _dayCount;
+    private int  _dayCount;
+    private bool _pendingVerification;
 
-    // Update intencionalmente VACÍO. La verificación previa aquí (cuando
-    // dayProgress > 0.995) duplicaba los reportes de HandleNewDay con valores
-    // ligeramente distintos. Toda verificación pasa por el evento OnNewDay.
-    void Update() { }
- 
+    // HandleNewDay fires from TimeManager.Update() — before CityMarker.Update() has
+    // computed actualDaylightHours for the new day. Deferring to LateUpdate() ensures
+    // all CityMarker.Update() calls have already run before we read their values.
+    void LateUpdate()
+    {
+        if (!_pendingVerification) return;
+        _pendingVerification = false;
+
+        foreach (var city in registeredCities)
+        {
+            if (!city.HasCompletedFirstDay()) continue;
+            VerifyCityDaylight(city);
+        }
+
+        _dayCount++;
+        if (showDebugInfo && _dayCount % 7 == 0)
+            Debug.Log($"[DaylightVerifier] Día {_dayCount} — {GetStatistics()}");
+    }
+
     private void HandleNewDay(DateTime utcDate)
     {
-        // Primer evento: lo descartamos porque corresponde al rollover del día parcial
-        // (la simulación arranca a 11:00 UTC, el primer día solo tiene 13 horas).
         if (!firstDayEventReceived)
         {
             firstDayEventReceived = true;
@@ -102,18 +118,8 @@ public class DaylightVerifier : MonoBehaviour
                           "La verificación se inicia desde el próximo día UTC completo.");
             return;
         }
- 
-        foreach (var city in registeredCities)
-        {
-            // Defensa adicional: las ciudades que aún no completaron su primer día
-            // tienen actualDaylightHours en 0 y generarían falsos positivos.
-            if (!city.HasCompletedFirstDay()) continue;
-            VerifyCityDaylight(city);
-        }
 
-        _dayCount++;
-        if (showDebugInfo && _dayCount % 7 == 0)
-            Debug.Log($"[DaylightVerifier] Día {_dayCount} — {GetStatistics()}");
+        _pendingVerification = true;
     }
  
     public void RegisterCity(CityMarker city)
@@ -133,26 +139,38 @@ public class DaylightVerifier : MonoBehaviour
             Debug.Log($"[DaylightVerifier] Ciudad eliminada: {city.cityName}");
     }
  
+    // Tolerance scales with latitude: monthly-average vs. end-of-month actual diverges
+    // naturally (±0.9h at 52°N in March), so a fixed 0.5h would produce false positives
+    // for high-latitude cities throughout spring/autumn.
+    private float GetToleranceForLatitude(float lat)
+    {
+        float absLat = Mathf.Abs(lat);
+        if (!useLatitudinalTolerance) return toleranceHours;
+        if (absLat >= 60f) return 2.5f;
+        if (absLat >= 45f) return 1.5f;
+        if (absLat >= 30f) return 1.0f;
+        return toleranceHours;
+    }
+
     private void VerifyCityDaylight(CityMarker city)
     {
         if (string.IsNullOrEmpty(city.cityName)) return;
         if (TimeManager.Instance == null) return;
- 
-        // OnNewDay se dispara al transicionar de día N → N+1. El valor en
-        // city.actualDaylightHours corresponde al día que TERMINÓ (día N).
+
         DateTime closedDay   = TimeManager.Instance.CurrentUtcTime.Date.AddDays(-1);
         int      reportMonth = closedDay.Month;
         int      reportDay   = closedDay.Day;
- 
+
         float expected = GetExpectedDaylight(city.cityName, reportMonth);
         if (expected < 0) return;
- 
+
         float actual     = city.actualDaylightHours;
         float difference = Mathf.Abs(expected - actual);
- 
+        float tolerance  = GetToleranceForLatitude(city.latitude);
+
         totalChecks++;
- 
-        if (difference > toleranceHours)
+
+        if (difference > tolerance)
         {
             totalViolations++;
             var violation = new DaylightViolation
@@ -166,16 +184,16 @@ public class DaylightVerifier : MonoBehaviour
                 timestamp     = closedDay.ToString("yyyy-MM-dd")
             };
             violations.Add(violation);
- 
+
             if (showDebugInfo)
-                Debug.LogWarning($"[DaylightVerifier] ⚠ VIOLACIÓN: {violation}");
+                Debug.LogWarning($"[DaylightVerifier] VIOLACION: {violation} (tol ±{tolerance}h)");
         }
         else if (showAllChecks && showDebugInfo)
         {
-            Debug.Log($"[DaylightVerifier] ✓ OK: {city.cityName} ({reportMonth}/{reportDay}): " +
-                      $"Esp {expected}h, Real {actual:F1}h, Diff {difference:F2}h");
+            Debug.Log($"[DaylightVerifier] OK: {city.cityName} ({reportMonth}/{reportDay}): " +
+                      $"Esp {expected}h, Real {actual:F1}h, Diff {difference:F2}h (tol ±{tolerance}h)");
         }
- 
+
         if (totalChecks > 0)
             complianceRate = ((totalChecks - totalViolations) / (float)totalChecks) * 100f;
     }
@@ -289,6 +307,7 @@ public class DaylightVerifier : MonoBehaviour
     public void ResetVerifier()
     {
         firstDayEventReceived = false;
+        _pendingVerification  = false;
         _dayCount = 0;
         ClearViolations();
         if (showDebugInfo)
