@@ -1,23 +1,24 @@
 using System;
 using UnityEngine;
  
-/// <summary>
-/// Controla la rotación de la Tierra y la dirección de la luz solar.
-///
-/// MODELO ASTRONÓMICO (corregido):
-///   - El eje terrestre permanece alineado con +Y mundial (NO se aplica tilt al transform).
-///   - El efecto estacional se introduce vía la componente Y del vector sunDir = (cos δ, sin δ, 0).
-///   - La rotación diaria es pura alrededor de Y: angleY = (UTC_hours - 12) * 15°.
-///   - Greenwich (lon=0°) queda cenital al sol a las 12:00 UTC, equinoccio.
-///
-/// FIX CRÍTICO (vs versión anterior):
-///   La versión previa hacía Quaternion.Euler(axialTilt, -angleY, 0f), aplicando el tilt
-///   de 23.44° AL MISMO TIEMPO que la declinación ya estaba incluida en sunDir. El efecto
-///   estacional quedaba aplicado dos veces, causando un déficit sistemático de horas de luz
-///   en latitudes >40° durante el invierno (verificado: NY 64% del esperado, Vancouver 54%).
-/// </summary>
+
+// Controla la rotación de la Tierra y la dirección de la luz solar.
+//
+// MODELO ASTRONÓMICO (corregido):
+// - El eje terrestre permanece alineado con +Y mundial (NO se aplica tilt al transform).
+// - El efecto estacional se introduce vía la componente Y del vector sunDir = (cos δ, sin δ, 0).
+// - La rotación diaria es pura alrededor de Y: angleY = (UTC_hours - 12) * 15°.
+// - Greenwich (lon=0°) queda cenital al sol a las 12:00 UTC, equinoccio.
+//
+// FIX CRÍTICO (vs versión anterior):
+// La versión previa hacía Quaternion.Euler(axialTilt, -angleY, 0f), aplicando el tilt
+// de 23.44° AL MISMO TIEMPO que la declinación ya estaba incluida en sunDir. El efecto
+// estacional quedaba aplicado dos veces, causando un déficit sistemático de horas de luz
+// en latitudes >40° durante el invierno (verificado: NY 64% del esperado, Vancouver 54%).
+
 public class SunController : MonoBehaviour
 {
+// Gestiona instance.
     public static SunController Instance { get; private set; }
  
     [Header("Referencias")]
@@ -43,6 +44,7 @@ public class SunController : MonoBehaviour
     private float   _cachedDeclination;
     private Vector3 _cachedSunDirection = Vector3.right;
  
+// Configura referencias tempranas antes de Start.
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -57,6 +59,7 @@ public class SunController : MonoBehaviour
             earthTransform.rotation = Quaternion.identity;
     }
  
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
     void Update()
     {
         if (TimeManager.Instance == null || sunLight == null || earthTransform == null)
@@ -65,11 +68,12 @@ public class SunController : MonoBehaviour
         DateTime utc = TimeManager.Instance.CurrentUtcTime;
  
         // Orden: AimSun cachea sunDir → RotateEarth fija el transform.
-        // Cualquier consumidor que lea GetSunDirection() obtiene el valor del mismo frame.
+        // Cualquier consumidor que lea GetSunDirection() obtiene el valor del mismo fotograma.
         AimSun(utc);
         RotateEarth(utc);
     }
  
+// Aplica constant lighting
     void ApplyConstantLighting()
     {
         if (sunLight != null)
@@ -82,12 +86,10 @@ public class SunController : MonoBehaviour
  
     // ──────────────────────────────────────────────────────────────────────────
     // Rotación diaria pura alrededor del eje Y mundial.
-    //
-    //   ANTES: Quaternion.Euler(axialTilt, -angleY, 0f)   ← BUG: doble cómputo
-    //   AHORA: Quaternion.Euler(0f,        -angleY, 0f)   ← FIX
-    //
+    // ANTES: Quaternion.Euler(axialTilt, -angleY, 0f)   ← BUG: doble cómputo
+    // AHORA: Quaternion.Euler(0f,        -angleY, 0f)   ← FIX
     // Al mediodía UTC (angleY = 0), Greenwich (+X local) apunta al sol (+X mundial).
-    // ──────────────────────────────────────────────────────────────────────────
+    // Realiza rotate earth
     void RotateEarth(DateTime utc)
     {
         double totalHours      = utc.TimeOfDay.TotalHours;
@@ -101,12 +103,11 @@ public class SunController : MonoBehaviour
  
     // ──────────────────────────────────────────────────────────────────────────
     // Dirección del sol en espacio mundial al mediodía UTC.
-    //
     // sunDir = (cos δ, sin δ, 0)
-    //   - Equinoccio   (δ=0):        sol en +X → ambos hemisferios igual.
-    //   - Solsticio jun (δ=+23.44°): sol con offset +Y → hemisferio norte favorecido.
-    //   - Solsticio dic (δ=-23.44°): sol con offset -Y → hemisferio sur favorecido.
-    // ──────────────────────────────────────────────────────────────────────────
+    // - Equinoccio   (δ=0):        sol en +X → ambos hemisferios igual.
+    // - Solsticio jun (δ=+23.44°): sol con offset +Y → hemisferio norte favorecido.
+    // - Solsticio dic (δ=-23.44°): sol con offset -Y → hemisferio sur favorecido.
+    // Realiza aim sun
     void AimSun(DateTime utc)
     {
         if (utc.DayOfYear != _cachedDayOfYear)
@@ -152,8 +153,10 @@ public class SunController : MonoBehaviour
     // ── API pública (sin cambios de firma) ───────────────────────────────────
  
     public Vector3 GetSunDirection()       => _cachedSunDirection;
+// Obtiene actual declination
     public float   GetCurrentDeclination() => _cachedDeclination;
  
+// Indica si daylight at posición.
     public bool IsDaylightAtPosition(Vector3 worldPosition, Vector3 earthCenter)
     {
         Vector3 normal     = (worldPosition - earthCenter).normalized;
@@ -163,6 +166,7 @@ public class SunController : MonoBehaviour
         return dotProduct > -0.01454f;
     }
  
+// Obtiene sun ángulo at posición
     public float GetSunAngleAtPosition(Vector3 worldPosition, Vector3 earthCenter)
     {
         Vector3 normal     = (worldPosition - earthCenter).normalized;
@@ -171,6 +175,7 @@ public class SunController : MonoBehaviour
         return angleRad * Mathf.Rad2Deg;
     }
  
+// Se ejecuta al dibujar gizmos en la escena.
     void OnDrawGizmos()
     {
         if (sunLight != null && earthTransform != null)
@@ -186,6 +191,7 @@ public class SunController : MonoBehaviour
         }
     }
  
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
     void OnDestroy()
     {
         if (Instance == this)

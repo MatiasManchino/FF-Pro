@@ -19,12 +19,14 @@ namespace FreightForwarder.Managers
         public event Action<Agent> OnAgentReturned;
         public event Action<Agent> OnAgentBankrupt;
 
+// Se ejecuta durante Awake al iniciar el componente.
         protected override void OnAwake()
         {
             _agents = new Dictionary<string, Agent>();
             InitializeAgents();
         }
 
+// Inicializa ialize agentes.
         private void InitializeAgents()
         {
             CreateAgent("maersk", "Maersk Logistics", "rotterdam",
@@ -74,6 +76,7 @@ namespace FreightForwarder.Managers
                                   Constants.TransportMode[] modes)
         {
             var agent = new Agent(id, name, homeCity, personality, price, speed, reliability, capacity);
+// Foreach
             foreach (var mode in modes)
                 agent.SupportedModes.Add(mode);
             _agents[id] = agent;
@@ -81,7 +84,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // PROCESAMIENTO DIARIO
-        // ═══════════════════════════════════
+        // Se ejecuta al iniciar el componente.
 
         private void Start()
         {
@@ -89,6 +92,7 @@ namespace FreightForwarder.Managers
                 FFTimeManager.Instance.OnDayPassed += ProcessAgentDecisions;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -96,8 +100,10 @@ namespace FreightForwarder.Managers
                 FFTimeManager.Instance.OnDayPassed -= ProcessAgentDecisions;
         }
 
+// Gestiona process agente decisions.
         private void ProcessAgentDecisions()
         {
+// Foreach
             foreach (var agent in _agents.Values)
             {
                 if (agent.CurrentState == Constants.AgentState.Bankrupt) continue;
@@ -136,10 +142,11 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // GESTIÓN DE CARGAS
-        // ═══════════════════════════════════
+        // Gestiona assign cargamento to agente.
 
         public void AssignCargoToAgent(string agentId, string cargoId)
         {
+            if (string.IsNullOrEmpty(agentId)) return;
             if (!_agents.TryGetValue(agentId, out Agent agent)) return;
             if (!agent.CurrentCargoIds.Contains(cargoId))
             {
@@ -148,22 +155,28 @@ namespace FreightForwarder.Managers
             }
         }
 
+// Elimina cargamento from agent
         public void RemoveCargoFromAgent(string agentId, string cargoId)
         {
+            if (string.IsNullOrEmpty(agentId)) return;
             if (!_agents.TryGetValue(agentId, out Agent agent)) return;
             agent.CurrentCargoIds.Remove(cargoId);
             agent.CurrentLoad = Math.Max(0, agent.CurrentLoad - 1);
         }
 
+// Registra entrega.
         public void RecordDelivery(string agentId, string cargoId, bool wasSuccessful, bool wasAbandoned)
         {
+            if (string.IsNullOrEmpty(agentId)) return;
             if (!_agents.TryGetValue(agentId, out Agent agent)) return;
             agent.RecordDelivery(wasSuccessful, wasAbandoned);
             RemoveCargoFromAgent(agentId, cargoId);
         }
 
+// Registra agente change.
         public void RecordAgentChange(string oldAgentId)
         {
+            if (string.IsNullOrEmpty(oldAgentId)) return;
             if (!_agents.TryGetValue(oldAgentId, out Agent agent)) return;
             agent.AgentTrust = Math.Max(0, agent.AgentTrust - Constants.AGENT_TRUST_LOSS_PER_ABANDON);
             agent.UpdateState();
@@ -171,7 +184,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // VERIFICACIONES DE COMPORTAMIENTO
-        // ═══════════════════════════════════
+        // Verifica cargamento abandonment.
 
         public bool CheckCargoAbandonment(Agent agent, Cargo cargo)
         {
@@ -186,6 +199,7 @@ namespace FreightForwarder.Managers
             return false;
         }
 
+// Public
         public (bool willScam, int extraCost) CheckScam(Agent agent, Cargo cargo, int baseCost)
         {
             if (agent.Personality != Constants.AgentPersonality.Scammer) return (false, 0);
@@ -199,6 +213,7 @@ namespace FreightForwarder.Managers
             return (false, 0);
         }
 
+// Verifica lie.
         public bool CheckLie(Agent agent, Cargo cargo)
         {
             if (agent.Personality != Constants.AgentPersonality.Liar) return false;
@@ -211,6 +226,7 @@ namespace FreightForwarder.Managers
             return false;
         }
 
+// Verifica sabotage.
         public bool CheckSabotage(Agent agent, string targetAgentId, int playerLevel)
         {
             if (agent.Personality != Constants.AgentPersonality.Envious) return false;
@@ -219,6 +235,7 @@ namespace FreightForwarder.Managers
             float chance = 0f;
             if (playerLevel >= 5 && agent.Relationship <= Constants.AgentRelationship.Neutral)
                 chance = 0.20f;
+            // Realiza if
             else if (playerLevel >= 3 && agent.TotalDeliveries == 0)
                 chance = 0.15f;
 
@@ -232,19 +249,23 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // CONSULTAS
-        // ═══════════════════════════════════
+        // Obtiene agent
 
         public Agent GetAgent(string id)
         {
+            if (string.IsNullOrEmpty(id)) return null;
             _agents.TryGetValue(id, out Agent agent);
             return agent;
         }
 
+// Obtiene all agents
         public Dictionary<string, Agent> GetAllAgents() => _agents;
 
+// Obtiene available agents
         public List<Agent> GetAvailableAgents(Constants.TransportMode mode)
         {
             var result = new List<Agent>();
+// Foreach
             foreach (var agent in _agents.Values)
             {
                 if (agent.IsAvailable() && agent.OffersTransportMode(mode))
@@ -255,18 +276,21 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // SAVE / RESTORE
-        // ═══════════════════════════════════
+        // Obtiene save datos
 
         public List<AgentSaveData> GetSaveData()
         {
             var list = new List<AgentSaveData>();
+// Foreach
             foreach (var agent in _agents.Values)
                 list.Add(new AgentSaveData(agent));
             return list;
         }
 
+// Gestiona restore from guarda.
         public void RestoreFromSave(List<AgentSaveData> saveData)
         {
+// Foreach
             foreach (var data in saveData)
             {
                 if (_agents.TryGetValue(data.AgentId, out Agent agent))

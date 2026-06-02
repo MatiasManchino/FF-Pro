@@ -4,11 +4,11 @@ using UnityEngine;
 
 namespace FreightForwarder.Systems.Progression
 {
-    /// <summary>
-    /// Calcula bonus/penalizaciones de agentes basados en historial, especialización
-    /// y experiencia en rutas específicas. No modifica Agent.cs ni AgentManager.cs.
-    /// Los managers existentes llaman a AgentBonusSystem.GetModifiers() si USE_AGENT_V2 activo.
-    /// </summary>
+
+    // Calcula bonus/penalizaciones de agentes basados en historial, especialización
+    // y experiencia en rutas específicas. No modifica Agent.cs ni AgentManager.cs.
+    // Los managers existentes llaman a AgentBonusSystem.GetModifiers() si USE_AGENT_V2 activo.
+
     public static class AgentBonusSystem
     {
         // ── Registro de rutas por agente ─────────────────────────────────────
@@ -16,8 +16,10 @@ namespace FreightForwarder.Systems.Progression
         private static readonly Dictionary<string, Dictionary<string, int>> _routeHistory
             = new Dictionary<string, Dictionary<string, int>>();
 
+// Registra ruta.
         public static void RecordRoute(string agentId, string originId, string destId)
         {
+            if (string.IsNullOrEmpty(agentId)) return;
             if (!_routeHistory.TryGetValue(agentId, out var routes))
             {
                 routes = new Dictionary<string, int>();
@@ -27,6 +29,7 @@ namespace FreightForwarder.Systems.Progression
             routes[key] = routes.TryGetValue(key, out int count) ? count + 1 : 1;
         }
 
+// Obtiene ruta cantidad
         public static int GetRouteCount(string agentId, string originId, string destId)
         {
             if (!_routeHistory.TryGetValue(agentId, out var routes)) return 0;
@@ -34,15 +37,20 @@ namespace FreightForwarder.Systems.Progression
             return count;
         }
 
+// Ruta clave.
         private static string RouteKey(string o, string d) => $"{o}>{d}";
 
         // ── Cálculo de modificadores ──────────────────────────────────────────
 
         public class Modifiers
         {
+// Velocidad bonus.
             public float SpeedBonus      { get; set; } = 1f;   // multiplicador
+// Gestiona cost reduction.
             public float CostReduction   { get; set; } = 0f;   // 0–0.3 = 0–30% descuento
+// Gestiona reliability bonus.
             public float ReliabilityBonus{ get; set; } = 0f;   // suma directa 0–0.2
+// Gestiona description.
             public string Description    { get; set; } = "";
         }
 
@@ -61,6 +69,7 @@ namespace FreightForwarder.Systems.Progression
                 m.ReliabilityBonus += 0.08f;
                 reasons.Append($"+ruta x{routeCount} ");
             }
+            // Realiza if
             else if (routeCount >= 2)
             {
                 m.SpeedBonus    += 0.08f;
@@ -83,6 +92,7 @@ namespace FreightForwarder.Systems.Progression
                 m.ReliabilityBonus += 0.05f;
                 reasons.Append("+veterano ");
             }
+            // Realiza if
             else if (agent.TotalDeliveries >= 20)
             {
                 m.SpeedBonus += 0.03f;

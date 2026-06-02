@@ -4,15 +4,19 @@ using UnityEngine;
 
 namespace FreightForwarder.Managers
 {
-    /// <summary>
-    /// Puente entre el TimeManager del mapa (UTC real) y el sistema de días del juego.
-    /// No corre su propio timer: escucha TimeManager.OnNewDay y lleva el conteo de días de partida.
-    /// </summary>
+
+    // Puente entre el TimeManager del mapa (UTC real) y el sistema de días del juego.
+    // No corre su propio timer: escucha TimeManager.OnNewDay y lleva el conteo de días de partida.
+
     public class FFTimeManager : Singleton<FFTimeManager>
     {
+// Actual día.
         public int CurrentDay { get; private set; }
+// Actual date.
         public DateTime CurrentDate { get; private set; }
+// Día progress.
         public float DayProgress { get; private set; }
+// Gestiona continuous días.
         public float ContinuousDays { get; private set; }
 
         private int _previousMonth;
@@ -21,12 +25,14 @@ namespace FreightForwarder.Managers
         public event Action OnMonthPassed;
         public event Action<DateTime> OnDateChanged;
 
+// Se ejecuta durante Awake al iniciar el componente.
         protected override void OnAwake()
         {
             CurrentDay = 0;
             CurrentDate = DateTime.UtcNow;
         }
 
+// Se ejecuta al iniciar el componente.
         private void Start()
         {
             if (TimeManager.Instance != null)
@@ -42,12 +48,14 @@ namespace FreightForwarder.Managers
             }
         }
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
         private void Update()
         {
             if (TimeManager.Instance != null)
                 DayProgress = TimeManager.Instance.DayProgress;
         }
 
+// Gestiona nuevo día.
         private void HandleNewDay(DateTime date)
         {
             CurrentDay++;
@@ -57,11 +65,13 @@ namespace FreightForwarder.Managers
             OnDateChanged?.Invoke(date);
         }
 
+// Gestiona nuevo mes.
         private void HandleNewMonth(DateTime date)
         {
             OnMonthPassed?.Invoke();
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             if (TimeManager.Instance != null)
@@ -71,6 +81,7 @@ namespace FreightForwarder.Managers
             }
         }
 
+// Obtiene formatted date
         public string GetFormattedDate()
             => CurrentDate.ToString("dd/MM/yyyy");
     }

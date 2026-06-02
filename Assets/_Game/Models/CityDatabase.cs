@@ -3,15 +3,17 @@ using UnityEngine;
 
 namespace FreightForwarder.Models
 {
-    /// <summary>
-    /// Base de datos de ciudades logísticas del juego.
-    /// Coordenadas alineadas con SpawnCity() en GameBootstrapper
-    /// (sistema del mapa: lon_mapa = lon_real + 180°, normalizado a ±180°).
-    /// </summary>
+
+    // Base de datos de ciudades logísticas del juego.
+    // Coordenadas alineadas con SpawnCity() en GameBootstrapper
+    // (sistema del mapa: lon_mapa = lon_real + 180°, normalizado a ±180°).
+
     public static class CityDatabase
     {
+// Devuelve la all ciudades
         public static Dictionary<string, WorldCity> AllCities { get; private set; }
 
+// Inicializa ialize.
         public static void Initialize()
         {
             if (AllCities != null) return;
@@ -71,6 +73,7 @@ namespace FreightForwarder.Models
                                           unlocked, unlockCost, tier, popularity);
         }
 
+// Obtiene ciudad
         public static WorldCity GetCity(string id)
         {
             if (AllCities == null) Initialize();
@@ -78,34 +81,62 @@ namespace FreightForwarder.Models
             return city;
         }
 
+// Obtiene distancia
         public static float GetDistance(string cityId1, string cityId2)
         {
             WorldCity a = GetCity(cityId1);
             WorldCity b = GetCity(cityId2);
             if (a == null || b == null)
             {
-                Debug.LogWarning($"[CityDatabase] Ciudad no encontrada: '{cityId1}' o '{cityId2}'");
+                // Ciudad sin datos en CityDatabase: devolver 0 sin warning (el marítimo no usa esta distancia).
                 return 0f;
             }
             return a.DistanceTo(b);
         }
 
+// Obtiene unlocked ciudades
         public static List<WorldCity> GetUnlockedCities()
         {
             var result = new List<WorldCity>();
             if (AllCities == null) Initialize();
+// Foreach
             foreach (var city in AllCities.Values)
                 if (city.IsUnlocked) result.Add(city);
             return result;
         }
 
+// Obtiene ciudad by muestra nombre
         public static WorldCity GetCityByDisplayName(string displayName)
         {
             if (AllCities == null) Initialize();
+// Foreach
             foreach (var city in AllCities.Values)
                 if (city.DisplayName.Equals(displayName, System.StringComparison.OrdinalIgnoreCase))
                     return city;
             return null;
+        }
+
+
+        // Nombre legible y capitalizado de una ciudad/puerto a partir de su id.
+        // Usa el DisplayName canónico (con acentos) si existe; si no, capitaliza el id.
+
+        public static string DisplayNameOf(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return "";
+            var city = GetCity(id);
+            if (city != null && !string.IsNullOrEmpty(city.DisplayName)) return city.DisplayName;
+            return ToTitleCase(id.Replace('_', ' '));
+        }
+
+// Gestiona to title case.
+        public static string ToTitleCase(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            var parts = s.Split(' ');
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i].Length > 0)
+                    parts[i] = char.ToUpper(parts[i][0]) + parts[i].Substring(1);
+            return string.Join(" ", parts);
         }
     }
 }

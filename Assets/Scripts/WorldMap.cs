@@ -4,11 +4,34 @@ using System.Collections.Generic;
 
 public class WorldMap : MonoBehaviour
 {
+// Gestiona instance.
     public static WorldMap Instance { get; private set; }
 
     [Header("Tierra")]
     public float        earthRadius = 1000f;
     public MeshRenderer earthMeshRenderer;
+
+    [Header("Vehículos")]
+    public GameObject shipPrefab;
+    public float      shipScale   = 0.00005f;
+    [Tooltip("Eje local del modelo que apunta hacia la proa. DIRECCIÓN unitaria, NO ángulos. Probá (1,0,0), (0,0,1) o (0,1,0).")]
+    public Vector3    shipBowAxis  = Vector3.right;   // +X → probá (0,0,1) o (0,1,0) si falla
+    [Tooltip("Eje local del modelo que apunta hacia ARRIBA (cubierta). DIRECCIÓN unitaria, NO ángulos. " +
+             "MANDA sobre la auto-detección: si está acostado, probá los 4: (0,1,0), (0,0,1), (0,-1,0), (0,0,-1). " +
+             "Poné (0,0,0) para que lo detecte solo desde el casco (Object_19).")]
+    public Vector3    shipDeckAxis = Vector3.up;      // probá (0,1,0)/(0,0,1)/(0,-1,0)/(0,0,-1); (0,0,0)=auto
+    [Tooltip("Giro extra del barco alrededor de su eje de avance (grados). Usalo para terminar de pararlo: probá 90 o -90 si está acostado de costado.")]
+    public float      shipRollOffset = 0f;
+    public GameObject planePrefab;
+    public float      planeScale   = 0.00005f;
+    public Vector3    planeBowAxis = Vector3.forward;
+    public Vector3    planeDeckAxis = Vector3.up;   // eje local que apunta "arriba" (techo del avión)
+    public GameObject truckPrefab;
+    public float      truckScale   = 0.00005f;
+    public Vector3    truckBowAxis = Vector3.forward;
+    public GameObject trainPrefab;
+    public float      trainScale   = 0.00005f;
+    public Vector3    trainBowAxis = Vector3.forward;
 
     [Header("Texturas mensuales")]
     [Tooltip("Ruta relativa a cualquier carpeta Resources/ del proyecto.")]
@@ -20,8 +43,13 @@ public class WorldMap : MonoBehaviour
 
     private readonly List<Texture2D> _textures = new List<Texture2D>();
     private Material _mat;
+    private Texture2D _maskWaterLand;
+    private Texture2D _maskIce;
+    private const string maskWaterLandFile = "mask-water-land";
+    private const string maskIceFile = "mask-ice";
+    private bool _maskDataReadable;
 
-    // Cached shader property IDs
+    // Almacenado en caché sombreado property IDs
     private static readonly int PropMainTex  = Shader.PropertyToID("_MainTex");
     private static readonly int PropBlendTex = Shader.PropertyToID("_BlendTex");
     private static readonly int PropBlend    = Shader.PropertyToID("_Blend");
@@ -29,18 +57,20 @@ public class WorldMap : MonoBehaviour
     private static readonly int PropSunDir          = Shader.PropertyToID("_SunDir");
     private static readonly int PropNightBrightness = Shader.PropertyToID("_NightBrightness");
 
+// Configura referencias tempranas antes de Start.
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
-        // Scale here so CityMarkers can parent correctly during their Start().
+        // Escala here para que CityMarkers puede padre correctamente during their Start().
         transform.localScale = Vector3.one * (earthRadius * 2f);
     }
 
+// Inicializa el marcador: obtiene referencias, posiciona el objeto, crea el label y registra la ciudad.
     void Start()
     {
         if (earthMeshRenderer == null)
-            earthMeshRenderer = GetComponent<MeshRenderer>();
+            earthMeshRenderer = GetComponentInChildren<MeshRenderer>();
 
         if (earthMeshRenderer == null)
         {
@@ -53,6 +83,7 @@ public class WorldMap : MonoBehaviour
         LoadTextures();
     }
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
     void Update()
     {
         if (TimeManager.Instance == null || _textures.Count == 0) return;
@@ -62,6 +93,7 @@ public class WorldMap : MonoBehaviour
             _mat.SetVector(PropSunDir, SunController.Instance.GetSunDirection());
     }
 
+// Carga texturas
     private void LoadTextures()
     {
         _textures.Clear();
@@ -81,16 +113,44 @@ public class WorldMap : MonoBehaviour
             return;
         }
 
+        _maskWaterLand = Resources.Load<Texture2D>(texturesPath + maskWaterLandFile);
+        if (_maskWaterLand == null)
+        {
+            Debug.LogWarning($"[WorldMap] No se encontró la máscara agua/tierra: {texturesPath}{maskWaterLandFile}");
+        }
+        // Realiza if
+        else if (!_maskWaterLand.isReadable)
+        {
+            Debug.LogWarning($"[WorldMap] La máscara agua/tierra '{maskWaterLandFile}' no es legible desde scripts. Ajusta la importación para habilitar Read/Write.");
+            _maskWaterLand = null;
+        }
+
+        _maskIce = Resources.Load<Texture2D>(texturesPath + maskIceFile);
+        if (_maskIce == null)
+        {
+            Debug.LogWarning($"[WorldMap] No se encontró la máscara de hielo: {texturesPath}{maskIceFile}");
+        }
+        // Realiza if
+        else if (!_maskIce.isReadable)
+        {
+            Debug.LogWarning($"[WorldMap] La máscara de hielo '{maskIceFile}' no es legible desde scripts. Ajusta la importación para habilitar Read/Write.");
+            _maskIce = null;
+        }
+
+        _maskDataReadable = _maskWaterLand != null && _maskIce != null;
+
         var nightTex = Resources.Load<Texture2D>(texturesPath + "BlackMarble");
         if (nightTex != null && _mat.HasProperty(PropNightTex))
         {
             _mat.SetTexture(PropNightTex, nightTex);
             _mat.SetFloat(PropNightBrightness, nightBrightness);
         }
+        // Realiza if
         else if (nightTex == null)
             Debug.LogWarning("[WorldMap] No se encontró BlackMarble en " + texturesPath);
     }
 
+// Actualiza textura
     private void UpdateTexture(DateTime utcTime)
     {
         if (_textures.Count < 12) return;
@@ -111,17 +171,68 @@ public class WorldMap : MonoBehaviour
         }
     }
 
+// Indica si tiene mask datos
+    public bool HasMaskData => _maskDataReadable;
+
+// Indica si water at.
+    public bool IsWaterAt(float lat, float lon)
+    {
+        if (!_maskDataReadable || _maskWaterLand == null) return false;
+        Color sample = SampleMask(_maskWaterLand, lat, lon);
+        return sample.grayscale > 0.5f;
+    }
+
+// Indica si ice at.
+    public bool IsIceAt(float lat, float lon)
+    {
+        if (!_maskDataReadable || _maskIce == null) return false;
+        Color sample = SampleMask(_maskIce, lat, lon);
+        return sample.grayscale > 0.5f;
+    }
+
+// Gestiona sample máscara.
+    private static Color SampleMask(Texture2D mask, float lat, float lon)
+    {
+        if (mask == null || !mask.isReadable) return Color.black;
+        float maskLon = ConvertGameLonToMaskLon(lon);
+        Vector2 uv = LatLonToMaskUV(lat, maskLon);
+        return mask.GetPixelBilinear(uv.x, uv.y);
+    }
+
+// Convierte juego lon to mask lon
+    private static float ConvertGameLonToMaskLon(float gameLon)
+    {
+        // Ruta coordinates and ciudad datos use the in-juego longitude system
+        // (lon_game = lon_real + 180°, normalized to ±180°).
+        // The máscara textura indica si aligned to real longitudes, para que we shift it regreso.
+        float realLon = gameLon - 180f;
+        if (realLon < -180f) realLon += 360f;
+        else if (realLon > 180f) realLon -= 360f;
+        return realLon;
+    }
+
+// Lat lon to mask uv
+    private static Vector2 LatLonToMaskUV(float lat, float lon)
+    {
+        float u = (lon + 180f) / 360f;
+        if (u < 0f) u += 1f;
+        else if (u > 1f) u -= 1f;
+
+        float v = 1f - (lat + 90f) / 180f;
+        return new Vector2(u, v);
+    }
+
     // ── Coordinate conversion ─────────────────────────────────────────────────
     // Convention: lon=0 → +X, lon=90°E → +Z, North Pole → +Y.
     // This aligns with SunController: the sun is always in the +X half-space at UTC noon.
     
-    /// <summary>
-    /// Convierte coordenadas de latitud/longitud a posición 3D en la esfera.
-    /// </summary>
-    /// <param name="lat">Latitud en grados (-90 a 90).</param>
-    /// <param name="lon">Longitud en grados (-180 a 180).</param>
-    /// <param name="radius">Radio de la esfera.</param>
-    /// <returns>Posición 3D en coordenadas locales.</returns>
+
+    // Convierte coordenadas de latitud/longitud a posición 3D en la esfera.
+
+    // <param name="lat">Latitud en grados (-90 a 90).</param>
+    // <param name="lon">Longitud en grados (-180 a 180).</param>
+    // <param name="radius">Radio de la esfera.</param>
+    // <returns>Posición 3D en coordenadas locales.</returns>
     public Vector3 LatLonToPosition(float lat, float lon, float radius)
     {
         float latRad = lat * Mathf.Deg2Rad;
@@ -132,34 +243,34 @@ public class WorldMap : MonoBehaviour
             radius * Mathf.Cos(latRad) * Mathf.Sin(lonRad));
     }
 
-    /// <summary>
-    /// Convierte coordenadas de latitud/longitud a posición mundial.
-    /// </summary>
-    /// <param name="lat">Latitud en grados.</param>
-    /// <param name="lon">Longitud en grados.</param>
-    /// <returns>Posición 3D en coordenadas mundiales.</returns>
+
+    // Convierte coordenadas de latitud/longitud a posición mundial.
+
+    // <param name="lat">Latitud en grados.</param>
+    // <param name="lon">Longitud en grados.</param>
+    // <returns>Posición 3D en coordenadas mundiales.</returns>
     public Vector3 LatLonToWorldPosition(float lat, float lon)
     {
         Vector3 localPos = LatLonToPosition(lat, lon, earthRadius);
         return transform.TransformPoint(localPos);
     }
 
-    /// <summary>
-    /// Convierte una posición mundial a coordenadas de latitud/longitud.
-    /// </summary>
-    /// <param name="worldPos">Posición mundial.</param>
-    /// <returns>Vector2 con (latitud, longitud) en grados.</returns>
+
+    // Convierte una posición mundial a coordenadas de latitud/longitud.
+
+    // <param name="worldPos">Posición mundial.</param>
+    // <returns>Vector2 con (latitud, longitud) en grados.</returns>
     public Vector2 WorldPositionToLatLon(Vector3 worldPos)
     {
         Vector3 localPos = transform.InverseTransformPoint(worldPos);
         return LocalPositionToLatLon(localPos);
     }
 
-    /// <summary>
-    /// Convierte una posición local de la esfera a coordenadas de latitud/longitud.
-    /// </summary>
-    /// <param name="localPos">Posición local relativa al centro de la Tierra.</param>
-    /// <returns>Vector2 con (latitud, longitud) en grados.</returns>
+
+    // Convierte una posición local de la esfera a coordenadas de latitud/longitud.
+
+    // <param name="localPos">Posición local relativa al centro de la Tierra.</param>
+    // <returns>Vector2 con (latitud, longitud) en grados.</returns>
     public Vector2 LocalPositionToLatLon(Vector3 localPos)
     {
         Vector3 dir = localPos.normalized;
@@ -170,33 +281,33 @@ public class WorldMap : MonoBehaviour
         return new Vector2(lat, lon);
     }
 
-    /// <summary>
-    /// Obtiene la normal de la superficie en una posición mundial.
-    /// </summary>
-    /// <param name="worldPos">Posición mundial.</param>
-    /// <returns>Vector normal hacia afuera de la esfera.</returns>
+
+    // Obtiene la normal de la superficie en una posición mundial.
+
+    // <param name="worldPos">Posición mundial.</param>
+    // <returns>Vector normal hacia afuera de la esfera.</returns>
     public Vector3 GetSurfaceNormal(Vector3 worldPos) => (worldPos - transform.position).normalized;
 
-    /// <summary>
-    /// Obtiene la normal de la superficie en una latitud/longitud dada.
-    /// </summary>
-    /// <param name="lat">Latitud en grados.</param>
-    /// <param name="lon">Longitud en grados.</param>
-    /// <returns>Vector normal hacia afuera en la posición especificada.</returns>
+
+    // Obtiene la normal de la superficie en una latitud/longitud dada.
+
+    // <param name="lat">Latitud en grados.</param>
+    // <param name="lon">Longitud en grados.</param>
+    // <returns>Vector normal hacia afuera en la posición especificada.</returns>
     public Vector3 GetSurfaceNormalAtLatLon(float lat, float lon)
     {
         Vector3 localPos = LatLonToPosition(lat, lon, 1.0f);
         return transform.TransformDirection(localPos).normalized;
     }
 
-    /// <summary>
-    /// Calcula la distancia en línea recta entre dos puntos sobre la superficie.
-    /// </summary>
-    /// <param name="lat1">Latitud del primer punto.</param>
-    /// <param name="lon1">Longitud del primer punto.</param>
-    /// <param name="lat2">Latitud del segundo punto.</param>
-    /// <param name="lon2">Longitud del segundo punto.</param>
-    /// <returns>Distancia en unidades Unity.</returns>
+
+    // Calcula la distancia en línea recta entre dos puntos sobre la superficie.
+
+    // <param name="lat1">Latitud del primer punto.</param>
+    // <param name="lon1">Longitud del primer punto.</param>
+    // <param name="lat2">Latitud del segundo punto.</param>
+    // <param name="lon2">Longitud del segundo punto.</param>
+    // Distancia between points.
     public float DistanceBetweenPoints(float lat1, float lon1, float lat2, float lon2)
     {
         Vector3 pos1 = LatLonToPosition(lat1, lon1, earthRadius);
@@ -204,14 +315,14 @@ public class WorldMap : MonoBehaviour
         return Vector3.Distance(pos1, pos2);
     }
 
-    /// <summary>
-    /// Calcula la distancia del arco de círculo máximo entre dos puntos (más precisa que la distancia lineal).
-    /// </summary>
-    /// <param name="lat1">Latitud del primer punto.</param>
-    /// <param name="lon1">Longitud del primer punto.</param>
-    /// <param name="lat2">Latitud del segundo punto.</param>
-    /// <param name="lon2">Longitud del segundo punto.</param>
-    /// <returns>Distancia del arco en unidades Unity.</returns>
+
+    // Calcula la distancia del arco de círculo máximo entre dos puntos (más precisa que la distancia lineal).
+
+    // <param name="lat1">Latitud del primer punto.</param>
+    // <param name="lon1">Longitud del primer punto.</param>
+    // <param name="lat2">Latitud del segundo punto.</param>
+    // <param name="lon2">Longitud del segundo punto.</param>
+    // <returns>Distancia del arco en unidades Unity.</returns>
     public float GreatCircleDistance(float lat1, float lon1, float lat2, float lon2)
     {
         float lat1Rad = lat1 * Mathf.Deg2Rad;
@@ -230,52 +341,52 @@ public class WorldMap : MonoBehaviour
         return earthRadius * angle;
     }
 
-    /// <summary>
-    /// Verifica si un punto está en el lado iluminado de la Tierra.
-    /// Requiere SunController.Instance para funcionar.
-    /// </summary>
-    /// <param name="worldPos">Posición mundial a verificar.</param>
-    /// <returns>True si el punto está iluminado por el sol.</returns>
+
+    // Verifica si un punto está en el lado iluminado de la Tierra.
+    // Requiere SunController.Instance para funcionar.
+
+    // <param name="worldPos">Posición mundial a verificar.</param>
+    // <returns>Verdadero si el punto está iluminado por el sol.</returns>
     public bool IsPointInDaylight(Vector3 worldPos)
     {
         if (SunController.Instance == null) return false;
         return SunController.Instance.IsDaylightAtPosition(worldPos, transform.position);
     }
 
-    /// <summary>
-    /// Verifica si una coordenada geográfica está en el lado iluminado de la Tierra.
-    /// </summary>
-    /// <param name="lat">Latitud en grados.</param>
-    /// <param name="lon">Longitud en grados.</param>
-    /// <returns>True si está iluminado por el sol.</returns>
+
+    // Verifica si una coordenada geográfica está en el lado iluminado de la Tierra.
+
+    // <param name="lat">Latitud en grados.</param>
+    // <param name="lon">Longitud en grados.</param>
+    // <returns>Verdadero si está iluminado por el sol.</returns>
     public bool IsLatLonInDaylight(float lat, float lon)
     {
         Vector3 worldPos = LatLonToWorldPosition(lat, lon);
         return IsPointInDaylight(worldPos);
     }
 
-    /// <summary>
-    /// Obtiene el ángulo del sol sobre el horizonte en una posición dada.
-    /// </summary>
-    /// <param name="worldPos">Posición mundial.</param>
-    /// <returns>Ángulo en grados (negativo = noche, 0 = horizonte, 90 = cenit).</returns>
+
+    // Obtiene el ángulo del sol sobre el horizonte en una posición dada.
+
+    // <param name="worldPos">Posición mundial.</param>
+    // <returns>Ángulo en grados (negativo = noche, 0 = horizonte, 90 = cenit).</returns>
     public float GetSunAngleAtPoint(Vector3 worldPos)
     {
         if (SunController.Instance == null) return -90f;
         return SunController.Instance.GetSunAngleAtPosition(worldPos, transform.position);
     }
 
-    /// <summary>
-    /// Obtiene el mesh renderer de la Tierra.
-    /// </summary>
+
+    // Obtiene el mesh renderer de la Tierra.
+
     public MeshRenderer GetMeshRenderer()
     {
         return earthMeshRenderer;
     }
 
-    /// <summary>
-    /// Obtiene la textura actual de la Tierra.
-    /// </summary>
+
+    // Obtiene la textura actual de la Tierra.
+
     public Texture GetCurrentTexture()
     {
         if (_mat != null)
@@ -283,19 +394,19 @@ public class WorldMap : MonoBehaviour
         return null;
     }
 
-    /// <summary>
-    /// Obtiene el nombre del mes actual basado en la textura cargada.
-    /// </summary>
+
+    // Obtiene el nombre del mes actual basado en la textura cargada.
+
     public string GetCurrentMonthName()
     {
         if (TimeManager.Instance == null) return "Desconocido";
         return TimeManager.Instance.CurrentUtcTime.ToString("MMMM");
     }
 
-    /// <summary>
-    /// Calcula el punto subsolar (donde el sol está en el cenit).
-    /// </summary>
-    /// <returns>Vector2 con (latitud, longitud) del punto subsolar.</returns>
+
+    // Calcula el punto subsolar (donde el sol está en el cenit).
+
+    // <returns>Vector2 con (latitud, longitud) del punto subsolar.</returns>
     public Vector2 GetSubsolarPoint()
     {
         if (SunController.Instance == null || TimeManager.Instance == null)
@@ -317,6 +428,7 @@ public class WorldMap : MonoBehaviour
 
     // ── Diagnóstico en editor ─────────────────────────────────────────────────
 #if UNITY_EDITOR
+// Se ejecuta al dibujar gizmos selected.
     void OnDrawGizmosSelected()
     {
         if (!Application.isPlaying) return;
@@ -339,6 +451,7 @@ public class WorldMap : MonoBehaviour
         }
     }
 
+// Dibuja circle
     private void DrawCircle(Vector3 center, Vector3 normal, float radius, int segments)
     {
         Vector3 from = Vector3.Cross(normal, Vector3.up).normalized;

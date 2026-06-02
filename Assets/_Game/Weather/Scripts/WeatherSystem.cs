@@ -3,10 +3,10 @@ using UnityEngine;
 
 namespace FreightForwarder.Weather
 {
-    /// <summary>
-    /// Orchestrates the weather simulation tick and notifies WeatherManager.
-    /// Add this component to the FF System GameObject.
-    /// </summary>
+
+    // Orchestrates the weather simulation tick and notifies WeatherManager.
+    // Añade this component to the FF Sistema GameObject.
+
     public class WeatherSystem : Singleton<WeatherSystem>
     {
         [SerializeField] private WeatherConfig config;
@@ -15,8 +15,10 @@ namespace FreightForwarder.Weather
         private float       _timer;
         private float       _timeOffset;
 
+// Devuelve el rejilla
         public WeatherGrid Grid => _grid;
 
+// Se ejecuta durante Awake al iniciar el componente.
         protected override void OnAwake()
         {
             if (config == null)
@@ -26,7 +28,7 @@ namespace FreightForwarder.Weather
             PreWarmGrid();
         }
 
-        // Popula el grid con valores realistas desde el primer frame.
+        // Popula el rejilla con valores realistas desde el primer fotograma.
         // Sin esto, la nube tarda ~50 segundos en llegar al threshold.
         private void PreWarmGrid()
         {
@@ -51,6 +53,7 @@ namespace FreightForwarder.Weather
             }
         }
 
+// Se ejecuta al iniciar el componente.
         private void Start() => Activate();
 
         // Puede llamarse explícitamente si el Start() del ciclo de Unity llega tarde
@@ -64,6 +67,7 @@ namespace FreightForwarder.Weather
 
         private bool _activated;
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
         private void Update()
         {
             _timer += Time.deltaTime;
@@ -76,6 +80,7 @@ namespace FreightForwarder.Weather
             Tick();
         }
 
+// Gestiona tick.
         private void Tick()
         {
             var cells = _grid.AllCells;

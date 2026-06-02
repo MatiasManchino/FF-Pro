@@ -2,12 +2,12 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using FreightForwarder.Models;
 using FreightForwarder.Managers;
-using FreightForwarder.Map;
 using FreightForwarder.Weather;
 using FreightForwarder.Systems.World;
 using FreightForwarder.Systems.Progression;
-using FreightForwarder.Systems.Logistics;
 using FreightForwarder.Utils;
+using FreightForwarder.Map;
+using FreightForwarder.Systems.Maritime;
 
 public class GameBootstrapper : MonoBehaviour
 {
@@ -17,9 +17,21 @@ public class GameBootstrapper : MonoBehaviour
     public WorldMap            worldMap;
     public MapCameraController mapCameraController;
     public UIManager           uiManager;
-    public DaylightVerifier    daylightVerifier;
 
-
+    [Header("Vehículos")]
+    public GameObject shipPrefab;
+    public float      shipScale   = 0.00015f;
+    public Vector3    shipBowAxis = Vector3.right;
+    public GameObject planePrefab;
+    public float      planeScale   = 0.00005f;
+    public Vector3    planeBowAxis = Vector3.forward;
+    public GameObject truckPrefab;
+    public float      truckScale   = 0.00005f;
+    public Vector3    truckBowAxis = Vector3.forward;
+    public GameObject trainPrefab;
+    public float      trainScale   = 0.00005f;
+    public Vector3    trainBowAxis = Vector3.forward;
+// Configura referencias tempranas antes de Start.
     void Awake()
     {
         EnsureTimeManager();
@@ -27,22 +39,22 @@ public class GameBootstrapper : MonoBehaviour
         EnsureSunController();
         EnsureCamera();
         EnsureUIManager();
-        EnsureDaylightVerifier();
         SetupBackground();
         CreateSunVisual();
         SpawnCities();
     }
 
+// Inicializa el marcador: obtiene referencias, posiciona el objeto, crea el label y registra la ciudad.
     void Start()
     {
-        // El MapCameraController se inicializa solo (espera un frame y apunta a Buenos Aires)
+        // El MapCameraController se inicializa solo (espera un fotograma y apunta a Buenos Aires)
         uiManager?.CenterUIHubPanel();
-        CreateCloudLayer();
+        InitializeGameSystems();
         CreateCleanMapCloudLayer();
         CreateAtmosphericHalo();
-        // rutas demo removidas — las rutas dinámicas las maneja RouteManager
     }
 
+// Crea clean mapa cloud capa
     private void CreateCleanMapCloudLayer()
     {
         if (GameObject.Find("CloudLayer_CleanMap") != null)
@@ -52,7 +64,7 @@ public class GameBootstrapper : MonoBehaviour
         cloudGO.name = "CloudLayer_CleanMap";
         SphereMeshUtility.Apply(cloudGO, 64);
 
-        cloudGO.transform.localScale = worldMap.transform.localScale * 1.025f;
+        cloudGO.transform.localScale = worldMap.transform.localScale * 1.020f;
         cloudGO.transform.SetParent(worldMap.transform);
 
         var renderer = cloudGO.GetComponent<MeshRenderer>();
@@ -70,7 +82,7 @@ public class GameBootstrapper : MonoBehaviour
         {
             Debug.LogError("❌ No se encontró mapcompleteclean en Resources/Map/Textures/Cloud/");
         }
-
+        
         mat.color = new Color(1f, 1f, 1f, 0.9f);
 
         mat.SetFloat("_Mode", 3);
@@ -90,6 +102,7 @@ public class GameBootstrapper : MonoBehaviour
         controller.randomizeDirection = true;
     }
 
+// Crea atmospheric halo
     private void CreateAtmosphericHalo()
     {
         if (GameObject.Find("AtmosphericHalo") != null)
@@ -99,8 +112,8 @@ public class GameBootstrapper : MonoBehaviour
         go.name = "AtmosphericHalo";
         SphereMeshUtility.Apply(go, 64);
 
-        // Ligeramente más grande que la Tierra pero dentro de la capa de nubes
-        go.transform.localScale = worldMap.transform.localScale * 1.012f;
+        // Atmósfera y nubes a una distancia intermedia y cercana, para que convivan
+        go.transform.localScale = worldMap.transform.localScale * 1.018f;
         go.transform.SetParent(worldMap.transform);
 
         Destroy(go.GetComponent<Collider>());
@@ -130,7 +143,8 @@ public class GameBootstrapper : MonoBehaviour
         go.AddComponent<AtmosphericHaloController>();
     }
 
-    private void CreateCloudLayer()
+// Inicializa ialize juego systems.
+    private void InitializeGameSystems()
     {
         // Inicializar todos los sistemas de Freight Forwarder
         CityDatabase.Initialize();
@@ -142,14 +156,19 @@ public class GameBootstrapper : MonoBehaviour
         _ = AgentManager.Instance;
         _ = ClientManager.Instance;
         _ = CargoManager.Instance;
+        _ = MaritimeSimulationManager.Instance;
+        _ = TransportMarkerManager.Instance;
         _ = EventManager.Instance;
-        _ = RouteManager.Instance;
-
+        _ = WaterMaskSampler.Instance;
         // Sistema climático
         _ = WeatherManager.Instance;
         _ = CloudRenderer.Instance;
         _ = WeatherImpact.Instance;
         _ = HurricaneController.Instance;
+
+        // Cinta de noticias inferior (se autoconstruye su propio canvas y se suscribe a los eventos)
+        if (Object.FindAnyObjectByType<FreightForwarder.UI.NewsTicker>() == null)
+            new GameObject("NewsTicker").AddComponent<FreightForwarder.UI.NewsTicker>();
 
         // Sistemas V2 (FASE 4-9) — activados por FeatureFlags
         if (FeatureFlags.USE_WORLD_STATE)
@@ -161,22 +180,17 @@ public class GameBootstrapper : MonoBehaviour
         {
             _ = ProgressionManager.Instance;
         }
-        if (FeatureFlags.USE_ROUTE_GRAPH)
-        {
-            RouteGraph.Instance.Build(CityDatabase.AllCities);
-        }
-
         // Inicializar el sistema de clima explícitamente
         var weatherSys = WeatherSystem.Instance;
         weatherSys.Activate();
 
         GameManager.Instance.StartNewGame();
         Debug.Log($"[Bootstrap] Sistemas FF inicializados. " +
-                  $"RouteGraph={FeatureFlags.USE_ROUTE_GRAPH} " +
                   $"WorldState={FeatureFlags.USE_WORLD_STATE} " +
                   $"Progression={FeatureFlags.USE_PROGRESSION}");
     }
 
+// Gestiona ensure tiempo gestor.
     private void EnsureTimeManager()
     {
         if (timeManager != null) return;
@@ -185,28 +199,70 @@ public class GameBootstrapper : MonoBehaviour
             timeManager = new GameObject("TimeManager").AddComponent<TimeManager>();
     }
 
+// Gestiona ensure mundo mapa.
     private void EnsureWorldMap()
     {
-        if (worldMap != null) return;
-        worldMap = Object.FindAnyObjectByType<WorldMap>();
-        if (worldMap != null) return;
+        if (worldMap == null)
+        {
+            worldMap = Object.FindAnyObjectByType<WorldMap>();
 
-        var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        go.name = "Earth";
-        SphereMeshUtility.Apply(go, 128);
-        worldMap = go.AddComponent<WorldMap>();
-        var rend = go.GetComponent<MeshRenderer>();
-        worldMap.earthMeshRenderer = rend;
+            if (worldMap != null && worldMap.GetComponent<MeshRenderer>() == null
+                                 && worldMap.GetComponentInChildren<MeshRenderer>() == null)
+            {
+                // WorldMap está en un contenedor sin malla — ignorarlo y crear uno propio
+                worldMap = null;
+            }
+        }
 
-        var shader = Shader.Find("Custom/EarthBlend");
-        rend.sharedMaterial = shader != null
-            ? new Material(shader)
-            : new Material(Shader.Find("Standard"));
+        if (worldMap == null)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            go.name = "Earth";
+            SphereMeshUtility.Apply(go, 128);
+            worldMap = go.AddComponent<WorldMap>();
+            var rend = go.GetComponent<MeshRenderer>();
+            worldMap.earthMeshRenderer = rend;
 
-        if (shader == null)
-            Debug.LogWarning("[Bootstrap] Shader 'Custom/EarthBlend' no encontrado — usando Standard.");
+            var shader = Shader.Find("Custom/EarthBlend");
+            rend.sharedMaterial = shader != null
+                // Realiza material
+                ? new Material(shader)
+                : new Material(Shader.Find("Standard"));
+
+            if (shader == null)
+                Debug.LogWarning("[Bootstrap] Shader 'Custom/EarthBlend' no encontrado — usando Standard.");
+        }
+
+        // Pasar referencias de vehículos desde GameBootstrapper (persisten en la escena)
+        if (shipPrefab  != null) worldMap.shipPrefab  = shipPrefab;
+        if (planePrefab != null) worldMap.planePrefab = planePrefab;
+        if (truckPrefab != null) worldMap.truckPrefab = truckPrefab;
+        if (trainPrefab != null) worldMap.trainPrefab = trainPrefab;
+        worldMap.shipScale   = shipScale;   worldMap.shipBowAxis   = shipBowAxis;
+        worldMap.planeScale  = planeScale;  worldMap.planeBowAxis  = planeBowAxis;
+        worldMap.truckScale  = truckScale;  worldMap.truckBowAxis  = truckBowAxis;
+        worldMap.trainScale  = trainScale;  worldMap.trainBowAxis  = trainBowAxis;
+
+        // Avión: si no se asignó prefab en el Inspector, cargar el modelo 3D desde Resources.
+        if (worldMap.planePrefab == null)
+        {
+            var planeGlb = Resources.Load<GameObject>("Models/plane_a340");
+            if (planeGlb != null)
+            {
+                worldMap.planePrefab = planeGlb;
+                // El modelo plane_a340 es enorme en unidades nativas → escala muy chica.
+                // Ajustable: cambiá este valor (más grande = avión más grande).
+                worldMap.planeScale = 0.000006f;
+                // Ejes del modelo plane_a340 (ajustados con prueba visual):
+                // nariz = -X (con +X iba marcha atrás), arriba = -Y (con +Y iba boca abajo).
+                worldMap.planeBowAxis  = new Vector3(-1f, 0f, 0f);
+                worldMap.planeDeckAxis = new Vector3(0f, -1f, 0f);
+            }
+            else Debug.LogWarning("[Bootstrap] No se encontró Resources/Models/plane_a340 (¿está en Assets/Resources/Models/?).");
+        }
     }
 
+// Gestiona ensure sol controlador.
     private void EnsureSunController()
     {
         if (sunController != null) return;
@@ -217,6 +273,7 @@ public class GameBootstrapper : MonoBehaviour
         sunController = go.AddComponent<SunController>();
 
         Light dirLight = null;
+// Foreach
         foreach (var l in Object.FindObjectsByType<Light>())
         {
             if (l.type == LightType.Directional) { dirLight = l; break; }
@@ -233,6 +290,7 @@ public class GameBootstrapper : MonoBehaviour
         sunController.earthTransform = worldMap.transform;
     }
 
+// Gestiona ensure cámara.
     private void EnsureCamera()
     {
         if (mapCameraController != null) return;
@@ -247,6 +305,7 @@ public class GameBootstrapper : MonoBehaviour
         mapCameraController.earthTransform = worldMap.transform;
     }
 
+// Gestiona ensure UI gestor.
     private void EnsureUIManager()
     {
         if (uiManager != null) return;
@@ -255,14 +314,7 @@ public class GameBootstrapper : MonoBehaviour
             uiManager = new GameObject("UIManager").AddComponent<UIManager>();
     }
 
-    private void EnsureDaylightVerifier()
-    {
-        if (daylightVerifier != null) return;
-        daylightVerifier = Object.FindAnyObjectByType<DaylightVerifier>();
-        if (daylightVerifier == null)
-            daylightVerifier = new GameObject("DaylightVerifier").AddComponent<DaylightVerifier>();
-    }
-
+// Establece up background.
     private void SetupBackground()
     {
         RenderSettings.ambientMode  = AmbientMode.Flat;
@@ -291,6 +343,7 @@ public class GameBootstrapper : MonoBehaviour
         }
     }
 
+// Crea sun visual
     private void CreateSunVisual()
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -309,6 +362,7 @@ public class GameBootstrapper : MonoBehaviour
         sunController.sunVisual = go.transform;
     }
 
+// Genera cities.
     private void SpawnCities()
     {
         Color yellow = new Color(1f, 0.9f, 0f);
@@ -388,6 +442,7 @@ public class GameBootstrapper : MonoBehaviour
     }
 
 
+// Genera ciudad.
     private void SpawnCity(string cityName, float lat, float lon, Color color)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
@@ -417,129 +472,3 @@ public class GameBootstrapper : MonoBehaviour
     }
 }
 
-// 👇 FUERA de GameBootstrapper
-public class CloudLayerController : MonoBehaviour
-{
-    public float rotationSpeed      = 1.5f;
-    public float opacity            = 0.15f;
-    public bool  randomizeDirection = false; // activar para la capa de nubes clean
-
-    // Tasas de aceleración (grados/s por segundo)
-    private const float ACCEL_RATE = 0.25f;
-    private const float DECEL_RATE = 0.6f;
-
-    private Material _mat;
-    private Vector3  _axis;
-    private float    _currentSpeed;
-    private float    _targetSpeed;
-    private bool     _decelerating;
-    private float    _timer;
-    private float    _nextChangeSec;
-
-    void Start()
-    {
-        var rend = GetComponent<MeshRenderer>();
-        if (rend != null)
-        {
-            _mat = rend.material;
-            if (_mat.HasProperty("_Color"))
-            {
-                var c = _mat.color;
-                c.a = opacity;
-                _mat.color = c;
-            }
-            SetupMaterialForTransparency(_mat);
-        }
-
-        _axis         = Vector3.up;
-        _currentSpeed = 0f;                 // arranca desde cero → ease-in natural
-        _targetSpeed  = rotationSpeed;
-        ScheduleNextChange();
-    }
-
-    void Update()
-    {
-        float speedMult = TimeManager.Instance != null
-            ? TimeManager.Instance.CurrentSpeedMultiplier : 1f;
-
-        // Acelerar o desacelerar según si nos acercamos o alejamos de 0
-        float rate = Mathf.Abs(_currentSpeed) > Mathf.Abs(_targetSpeed) ? DECEL_RATE : ACCEL_RATE;
-        _currentSpeed = Mathf.MoveTowards(_currentSpeed, _targetSpeed, rate * Time.deltaTime);
-
-        transform.Rotate(_axis, _currentSpeed * speedMult * Time.deltaTime);
-
-        if (!randomizeDirection) return;
-
-        _timer += Time.deltaTime;
-
-        if (!_decelerating && _timer >= _nextChangeSec)
-        {
-            _targetSpeed  = 0f;   // empezar a frenar
-            _decelerating = true;
-        }
-
-        if (_decelerating && Mathf.Abs(_currentSpeed) < 0.05f)
-        {
-            // Llegó a ~0: elegir nueva dirección y acelerar de a poco
-            _currentSpeed = 0f;
-            _decelerating = false;
-            _timer        = 0f;
-            PickNewDirection();
-            ScheduleNextChange();
-        }
-    }
-
-    private void PickNewDirection()
-    {
-        // Eje inclinado aleatoriamente entre 5° y 35° del eje Y
-        float   tilt    = Random.Range(5f, 35f);
-        Vector3 tiltDir = new Vector3(Random.Range(-1f, 1f), 0f, Random.Range(-1f, 1f)).normalized;
-        _axis = Quaternion.AngleAxis(tilt, tiltDir) * Vector3.up;
-
-        // 30% de probabilidad de girar en sentido contrario
-        float sign = Random.value < 0.3f ? -1f : 1f;
-        _targetSpeed = rotationSpeed * sign;
-    }
-
-    private void ScheduleNextChange()
-    {
-        _nextChangeSec = Random.Range(20f, 60f);
-    }
-
-    private void SetupMaterialForTransparency(Material mat)
-    {
-        mat.SetFloat("_Mode", 3);
-        mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-        mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-        mat.SetInt("_ZWrite", 0);
-        mat.EnableKeyword("_ALPHABLEND_ON");
-        mat.renderQueue = 3000;
-    }
-}
-
-public class AtmosphericHaloController : MonoBehaviour
-{
-    private Material _mat;
-    private Camera   _cam;
-
-    void Start()
-    {
-        _mat = GetComponent<MeshRenderer>()?.material;
-        _cam = Camera.main;
-    }
-
-    void Update()
-    {
-        if (_mat == null || SunController.Instance == null) return;
-
-        Vector3 sunDir = SunController.Instance.GetSunDirection();
-        _mat.SetVector("_SunDir", sunDir);
-
-        if (_cam != null)
-        {
-            Vector3 camToEarth = (transform.position - _cam.transform.position).normalized;
-            float   backlit    = Mathf.Clamp01(Vector3.Dot(camToEarth, sunDir) * 2f);
-            _mat.SetFloat("_BacklitFactor", backlit);
-        }
-    }
-}

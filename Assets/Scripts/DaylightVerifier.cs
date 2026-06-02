@@ -1,18 +1,19 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Verifica que las horas de luz simuladas por cada ciudad coincidan con
-/// los valores astronómicos calculados desde la latitud de la ciudad.
-///
-/// El valor esperado se calcula con la fórmula estándar de duración del día:
-///   D = (2/15) * arccos(-tan(φ) * tan(δ))
-/// donde δ es la declinación solar del día (Spencer 1971).
-///
-/// Esto reemplaza la base de datos de promedios mensuales anterior, que estaba
-/// incorrecta para latitudes altas (ej. Hamburg: 20.2h en junio vs real ~17h).
-/// </summary>
+
+// Verifica que las horas de luz simuladas por cada ciudad coincidan con
+// los valores astronómicos calculados desde la latitud de la ciudad.
+//
+// El valor esperado se calcula con la fórmula estándar de duración del día:
+// D = (2/15) * arccos(-tan(φ) * tan(δ))
+// donde δ es la declinación solar del día (Spencer 1971).
+//
+// Esto reemplaza la base de datos de promedios mensuales anterior, que estaba
+// incorrecta para latitudes altas (ej. Hamburg: 20.2h en junio vs real ~17h).
+
 public class DaylightVerifier : MonoBehaviour
 {
     [Header("Configuración")]
@@ -50,6 +51,7 @@ public class DaylightVerifier : MonoBehaviour
         public float  difference;
         public string timestamp;
 
+// Gestiona to string.
         public override string ToString()
         {
             return $"{cityName} (Mes {month}, Día {day}): Esperado {expectedHours:F2}h, " +
@@ -57,6 +59,7 @@ public class DaylightVerifier : MonoBehaviour
         }
     }
 
+// Inicializa el marcador: obtiene referencias, posiciona el objeto, crea el label y registra la ciudad.
     void Start()
     {
         if (TimeManager.Instance != null)
@@ -72,20 +75,21 @@ public class DaylightVerifier : MonoBehaviour
 
         Debug.Log($"[DaylightVerifier] Iniciado. Referencia: fórmula astronómica. Tol base ±{toleranceHours}h — " +
                   $"esperando registro de ciudades y primer rollover UTC...");
-        // Note: cities register in their own Start() — count will be >0 once scene is live
+        // Nota: cities register in their own Start() — count se be >0 once scene indica si live
     }
 
     private int  _dayCount;
     private bool _pendingVerification;
 
-    // HandleNewDay fires from TimeManager.Update() — before CityMarker.Update() has
-    // computed actualDaylightHours for the day. LateUpdate() guarantees all
-    // CityMarker.Update() calls have already run before we read their values.
+    // HandleNewDay se ejecuta from TimeManager.Actualiza() — antes de CityMarker.Actualiza() determina si tiene
+    // calculado actualDaylightHours for the día. LateUpdate() guarantees all
+    // CityMarker.Actualiza() calls have already run antes de we read their values.
     void LateUpdate()
     {
         if (!_pendingVerification) return;
         _pendingVerification = false;
 
+// Foreach
         foreach (var city in registeredCities)
         {
             if (!city.HasCompletedFirstDay()) continue;
@@ -97,6 +101,7 @@ public class DaylightVerifier : MonoBehaviour
             Debug.Log($"[DaylightVerifier] Día {_dayCount} — {GetStatistics()}");
     }
 
+// Gestiona nuevo día.
     private void HandleNewDay(DateTime utcDate)
     {
         if (!firstDayEventReceived)
@@ -111,6 +116,7 @@ public class DaylightVerifier : MonoBehaviour
         _pendingVerification = true;
     }
 
+// Registra ciudad
     public void RegisterCity(CityMarker city)
     {
         if (!registeredCities.Contains(city))
@@ -121,6 +127,7 @@ public class DaylightVerifier : MonoBehaviour
         }
     }
 
+// Desregistra ciudad
     public void UnregisterCity(CityMarker city)
     {
         registeredCities.Remove(city);
@@ -128,6 +135,7 @@ public class DaylightVerifier : MonoBehaviour
             Debug.Log($"[DaylightVerifier] Ciudad eliminada: {city.cityName}");
     }
 
+// Obtiene tolerance for latitude
     private float GetToleranceForLatitude(float lat)
     {
         float absLat = Mathf.Abs(lat);
@@ -137,6 +145,7 @@ public class DaylightVerifier : MonoBehaviour
         return toleranceHours;
     }
 
+// Verifica ciudad daylight.
     private void VerifyCityDaylight(CityMarker city)
     {
         if (string.IsNullOrEmpty(city.cityName)) return;
@@ -171,6 +180,7 @@ public class DaylightVerifier : MonoBehaviour
             if (showDebugInfo)
                 Debug.LogWarning($"[DaylightVerifier] VIOLACION: {violation} (tol ±{tolerance}h)");
         }
+        // Realiza if
         else if (showAllChecks && showDebugInfo)
         {
             Debug.Log($"[DaylightVerifier] OK: {city.cityName} ({reportMonth}/{reportDay}): " +
@@ -183,9 +193,9 @@ public class DaylightVerifier : MonoBehaviour
 
     // ── Fórmula astronómica ───────────────────────────────────────────────────
 
-    // Standard day-length formula (Spencer 1971 declination approximation).
+    // Estándar día-length fórmula (Spencer 1971 declination aproximación).
     // Matches real-world sunrise-to-sunset within ~0.1-0.2h for any date and latitude.
-    // Returns 24h for polar day, 0h for polar night (via Clamp guard on cosHA).
+    // Calcula astronomical daylight.
     public static float ComputeAstronomicalDaylight(float latitude, int month, int day)
     {
         int   doy  = GetDayOfYear(month, day);
@@ -195,6 +205,7 @@ public class DaylightVerifier : MonoBehaviour
         return 2f * Mathf.Acos(cosHA) * Mathf.Rad2Deg / 15f;
     }
 
+// Obtiene día of año
     private static int GetDayOfYear(int month, int day)
     {
         int[] cumDays = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 };
@@ -203,24 +214,29 @@ public class DaylightVerifier : MonoBehaviour
 
     // ── API pública ───────────────────────────────────────────────────────────
 
-    // Returns the astronomical day length for the 15th of the given month (mid-month estimate).
+    // Gestiona get expected daylight.
     public float GetExpectedDaylight(float latitude, int month)
         => ComputeAstronomicalDaylight(latitude, month, 15);
 
+// Obtiene compliance rate
     public float GetComplianceRate() => complianceRate;
 
+// Obtiene statistics
     public string GetStatistics()
     {
         return $"Verificaciones: {totalChecks} | Violaciones: {totalViolations} | " +
                $"Cumplimiento: {complianceRate:F1}% | Ciudades: {registeredCities.Count}";
     }
 
+// Obtiene violations for ciudad
     public List<DaylightViolation> GetViolationsForCity(string cityName)
         => violations.FindAll(v => v.cityName == cityName);
 
+// Obtiene violations for mes
     public List<DaylightViolation> GetViolationsForMonth(int month)
         => violations.FindAll(v => v.month == month);
 
+// Borra violations.
     public void ClearViolations()
     {
         violations.Clear();
@@ -230,6 +246,7 @@ public class DaylightVerifier : MonoBehaviour
         Debug.Log("[DaylightVerifier] Historial de violaciones limpiado.");
     }
 
+// Exporta violations informe.
     public string ExportViolationsReport()
     {
         if (violations.Count == 0) return "No hay violaciones registradas.";
@@ -240,12 +257,14 @@ public class DaylightVerifier : MonoBehaviour
 
         var sorted = new List<DaylightViolation>(violations);
         sorted.Sort((a, b) => b.difference.CompareTo(a.difference));
+// Foreach
         foreach (var v in sorted)
             report += $"• {v}\n";
 
         return report;
     }
 
+// Restablece verifier
     public void ResetVerifier()
     {
         firstDayEventReceived = false;
@@ -257,6 +276,7 @@ public class DaylightVerifier : MonoBehaviour
     }
 
     [ContextMenu("Imprimir Reporte Completo")]
+// Imprime informe.
     public void PrintReport()
     {
         Debug.Log("[DaylightVerifier] " + GetStatistics());
@@ -264,6 +284,7 @@ public class DaylightVerifier : MonoBehaviour
     }
 
     [ContextMenu("Imprimir Estado Actual de Ciudades")]
+// Imprime actual ciudad estado.
     public void PrintCurrentCityState()
     {
         if (registeredCities.Count == 0) { Debug.Log("[DaylightVerifier] No hay ciudades registradas."); return; }
@@ -271,6 +292,7 @@ public class DaylightVerifier : MonoBehaviour
         int day   = TimeManager.Instance != null ? TimeManager.Instance.CurrentUtcTime.Day   : 15;
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"[DaylightVerifier] Estado actual — {registeredCities.Count} ciudades:");
+// Foreach
         foreach (var city in registeredCities)
         {
             float expected = ComputeAstronomicalDaylight(city.latitude, month, day);
@@ -280,9 +302,11 @@ public class DaylightVerifier : MonoBehaviour
         Debug.Log(sb.ToString());
     }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
     void OnDestroy()
     {
         if (TimeManager.Instance != null)
             TimeManager.Instance.OnNewDay -= HandleNewDay;
     }
 }
+#endif

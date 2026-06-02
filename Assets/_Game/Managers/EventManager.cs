@@ -12,18 +12,21 @@ namespace FreightForwarder.Managers
 
         public event Action<GameEvent, Cargo> OnEventTriggered;
 
+// Se ejecuta durante Awake al iniciar el componente.
         protected override void OnAwake()
         {
             _eventPool = new List<GameEvent>();
             InitializeEventPool();
         }
 
+// Se ejecuta al iniciar el componente.
         private void Start()
         {
             if (FFTimeManager.Instance != null)
                 FFTimeManager.Instance.OnDayPassed += ProcessDailyEvents;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -33,7 +36,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // POOL DE EVENTOS
-        // ═══════════════════════════════════
+        // Inicializa ialize evento pool.
 
         private void InitializeEventPool()
         {
@@ -165,6 +168,7 @@ namespace FreightForwarder.Managers
         private const float DAILY_EVENT_CHANCE = 0.12f;
         private readonly List<GameEvent> _applicable = new List<GameEvent>();
 
+// Gestiona process diario eventos.
         private void ProcessDailyEvents()
         {
             if (CargoManager.Instance == null) return;
@@ -172,6 +176,7 @@ namespace FreightForwarder.Managers
             int currentMonth      = FFTimeManager.Instance?.CurrentDate.Month ?? 1;
             int currentDayOfMonth = FFTimeManager.Instance?.CurrentDate.Day ?? 1;
 
+// Foreach
             foreach (var cargo in CargoManager.Instance.ActiveCargos)
             {
                 // Límite: 1 evento por cada 4 días de tránsito original
@@ -189,6 +194,7 @@ namespace FreightForwarder.Managers
 
                 // Reunir eventos aplicables y elegir uno al azar
                 _applicable.Clear();
+// Foreach
                 foreach (var evt in _eventPool)
                 {
                     if (evt.AppliesToCargo(cargo, stage, currentMonth, currentDayOfMonth, agentTrust))
@@ -201,6 +207,7 @@ namespace FreightForwarder.Managers
             }
         }
 
+// Obtiene actual stage
         private string GetCurrentStage(Cargo cargo)
         {
             if (cargo.TotalTransitDays <= 0) return "transit";
@@ -212,6 +219,7 @@ namespace FreightForwarder.Managers
             return "transit";
         }
 
+// Aplica evento
         private void ApplyEvent(GameEvent evt, Cargo cargo, int currentDay)
         {
             cargo.EventsEncountered.Add(evt.Id);

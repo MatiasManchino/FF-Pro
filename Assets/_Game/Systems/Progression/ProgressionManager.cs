@@ -7,17 +7,19 @@ using UnityEngine;
 
 namespace FreightForwarder.Systems.Progression
 {
-    /// <summary>
-    /// Controla desbloqueos: ciudades, rutas, oficinas y tier del jugador.
-    /// Escucha EconomyManager.OnLevelUp y CargoManager.OnCargoCompleted.
-    /// No modifica los managers existentes.
-    /// </summary>
+
+    // Controla desbloqueos: ciudades, rutas, oficinas y tier del jugador.
+    // Escucha EconomyManager.OnLevelUp y CargoManager.OnCargoCompleted.
+    // No modifica los managers existentes.
+
     public class ProgressionManager : Singleton<ProgressionManager>
     {
-        // ── Oficinas ──────────────────────────────────────────────────────────
+        // Gestiona office count.
 
         public int   OfficeCount    { get; private set; } = 1;
+// Jugador categoría.
         public int   PlayerTier     { get; private set; } = 1;
+// Devuelve la office upgrade cost
         public float OfficeUpgradeCost => 5000f * OfficeCount;
 
         // ── Ciudades desbloqueadas por tier ──────────────────────────────────
@@ -43,7 +45,7 @@ namespace FreightForwarder.Systems.Progression
         public event Action<int>       OnOfficeOpened;
         public event Action<string>    OnMilestoneReached;
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        // Se ejecuta al iniciar el componente.
 
         private void Start()
         {
@@ -59,6 +61,7 @@ namespace FreightForwarder.Systems.Progression
                 CargoManager.Instance.OnCargoCompleted += OnCargoCompleted;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -71,7 +74,7 @@ namespace FreightForwarder.Systems.Progression
                 CargoManager.Instance.OnCargoCompleted -= OnCargoCompleted;
         }
 
-        // ── Handlers ─────────────────────────────────────────────────────────
+        // Se invoca cuando el jugador sube de nivel.
 
         private void OnPlayerLevelUp(int newLevel)
         {
@@ -91,6 +94,7 @@ namespace FreightForwarder.Systems.Progression
             CheckMilestones(newLevel);
         }
 
+// Se invoca cuando el jugador gana experiencia.
         private void OnXPGained(int gained, int total)
         {
             int newTier = ComputeTierByXP(total);
@@ -102,6 +106,7 @@ namespace FreightForwarder.Systems.Progression
             }
         }
 
+// Se invoca cuando un cargamento se completa.
         private void OnCargoCompleted(Cargo cargo)
         {
             int completed = EconomyManager.Instance?.TotalCargosCompleted ?? 0;
@@ -115,6 +120,7 @@ namespace FreightForwarder.Systems.Progression
         private void ApplyTierUnlocks(int tier)
         {
             if (!TierCityUnlocks.TryGetValue(tier, out string[] cities)) return;
+// Foreach
             foreach (var cityId in cities)
             {
                 WorldCity city = CityDatabase.GetCity(cityId);
@@ -127,6 +133,7 @@ namespace FreightForwarder.Systems.Progression
             }
         }
 
+// Intenta open office
         public bool TryOpenOffice()
         {
             int cost = (int)OfficeUpgradeCost;
@@ -138,6 +145,7 @@ namespace FreightForwarder.Systems.Progression
             return true;
         }
 
+// Abre office.
         private void OpenOffice()
         {
             OfficeCount++;
@@ -157,24 +165,28 @@ namespace FreightForwarder.Systems.Progression
             Debug.Log($"[Progression] Oficina abierta. Total: {OfficeCount}");
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
+        // Calcula nivel
 
         private int ComputeTier(int xp, int level)
         {
             int tier = 1;
+// Foreach
             foreach (var kv in TierXPThreshold)
                 if (level >= kv.Key && xp >= kv.Value) tier = kv.Key;
             return tier;
         }
 
+// Calcula nivel by xp
         private int ComputeTierByXP(int totalXP)
         {
             int tier = 1;
+// Foreach
             foreach (var kv in TierXPThreshold)
                 if (totalXP >= kv.Value) tier = kv.Key;
             return tier;
         }
 
+// Verifica milestones.
         private void CheckMilestones(int level)
         {
             switch (level)
@@ -185,6 +197,7 @@ namespace FreightForwarder.Systems.Progression
             }
         }
 
+// Obtiene ciudades unlocked
         public int GetCitiesUnlocked() => CityDatabase.AllCities?.Count ?? 0;
     }
 }

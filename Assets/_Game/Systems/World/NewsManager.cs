@@ -6,15 +6,16 @@ using UnityEngine;
 
 namespace FreightForwarder.Systems.World
 {
-    /// <summary>
-    /// Genera noticias que reflejan el estado del mundo y disparan shocks en WorldStateManager.
-    /// Las noticias son consumidas por NewsTicker (UI existente) vía OnNewsPublished.
-    /// </summary>
+
+    // Genera noticias que reflejan el estado del mundo y disparan shocks en WorldStateManager.
+    // Las noticias son consumidas por NewsTicker (UI existente) vía OnNewsPublished.
+
     public class NewsManager : Singleton<NewsManager>
     {
         public event Action<NewsItem> OnNewsPublished;
 
         private readonly List<NewsItem> _recent = new List<NewsItem>();
+// Devuelve el recent noticias
         public IReadOnlyList<NewsItem> RecentNews => _recent;
 
         private static readonly NewsTemplate[] Templates = {
@@ -50,19 +51,70 @@ namespace FreightForwarder.Systems.World
                              NewsCategory.Demand, 0f, +0.20f, 0f),
         };
 
+        // Titulares de ambientación (rescatados del juego anterior) que aparecen al azar en la cinta.
+        private static readonly string[] BackgroundHeadlines = {
+            "🚢 Congestión récord en puertos asiáticos retrasa los envíos varios días.",
+            "📦 La falta de contenedores eleva las tarifas un 18%.",
+            "⚓ Un puerto clave opera al 60% por inspecciones extraordinarias.",
+            "✈ La saturación aérea encarece los envíos urgentes un 25%.",
+            "Demoras en aduanas generan costos extra por carga.",
+            "🚛 La escasez de choferes impacta la distribución terrestre.",
+            "Embotellamiento logístico en rutas europeas genera demoras.",
+            "Los fletes marítimos suben por la alta demanda.",
+            "Fábricas reducen su producción por falta de energía.",
+            "Demoras en transbordos afectan los cronogramas de entrega.",
+            "Los fletes express superan precios históricos (+30%).",
+            "Controles sanitarios ralentizan las importaciones de alimentos.",
+            "El tiempo de tránsito global aumenta un 15%.",
+            "El transporte terrestre sube tarifas por el combustible caro.",
+            "Un perro callejero se vuelve famoso por bailar cumbia en la plaza.",
+            "Aparece un mural de 30 metros pintado durante la noche por un artista anónimo.",
+            "Maratón nocturna reúne a 2000 corredores; gana un cartero de 55 años.",
+            "Ola de calor extremo de 42 grados paraliza la ciudad por tres días.",
+            "Festival de música independiente llena el estadio tres noches seguidas.",
+            "Se inaugura una ciclovía de 12 km que conecta el centro con la zona norte.",
+        };
+
+// Se ejecuta al iniciar el componente.
         private void Start()
         {
             if (FFTimeManager.Instance != null)
+            {
                 FFTimeManager.Instance.OnMonthPassed += OnMonthPassed;
+                FFTimeManager.Instance.OnDayPassed   += OnDayPassed;
+            }
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
             if (FFTimeManager.Instance != null)
+            {
                 FFTimeManager.Instance.OnMonthPassed -= OnMonthPassed;
+                FFTimeManager.Instance.OnDayPassed   -= OnDayPassed;
+            }
         }
 
+// Se invoca al terminar un día de juego.
+        private void OnDayPassed()
+        {
+            // ~12% de chance diaria de un titular de ambientación al azar.
+            if (UnityEngine.Random.value > 0.12f) return;
+            PublishHeadline(BackgroundHeadlines[UnityEngine.Random.Range(0, BackgroundHeadlines.Length)],
+                            NewsCategory.General);
+        }
+
+        // Publica un titular simple en la cinta (sin shock de mundo).
+        public void PublishHeadline(string headline, NewsCategory cat)
+        {
+            var item = new NewsItem(headline, "", cat, FFTimeManager.Instance?.GetFormattedDate() ?? "");
+            if (_recent.Count >= 20) _recent.RemoveAt(0);
+            _recent.Add(item);
+            OnNewsPublished?.Invoke(item);
+        }
+
+// Se invoca cuando mes transcurre.
         private void OnMonthPassed()
         {
             // 60% de chance de noticia mensual
@@ -72,6 +124,7 @@ namespace FreightForwarder.Systems.World
             Publish(tmpl);
         }
 
+// Gestiona publish.
         private void Publish(NewsTemplate tmpl)
         {
             var world = WorldStateManager.Instance;
@@ -98,17 +151,22 @@ namespace FreightForwarder.Systems.World
         }
     }
 
-    // ── Data types ────────────────────────────────────────────────────────────
+    // Noticias category.
 
     public enum NewsCategory { Fuel, Demand, Risk, General }
 
     public class NewsItem
     {
+// Gestiona headline.
         public string      Headline  { get; }
+// Gestiona body.
         public string      Body      { get; }
+// Gestiona category.
         public NewsCategory Category { get; }
+// Gestiona date.
         public string      Date      { get; }
 
+// Realiza noticias elemento
         public NewsItem(string headline, string body, NewsCategory cat, string date)
         {
             Headline = headline;
@@ -120,13 +178,20 @@ namespace FreightForwarder.Systems.World
 
     internal class NewsTemplate
     {
+// Gestiona headline.
         public string      Headline    { get; }
+// Gestiona body.
         public string      Body        { get; }
+// Gestiona category.
         public NewsCategory Category   { get; }
+// Combustible delta.
         public float       FuelDelta   { get; }
+// Demanda delta.
         public float       DemandDelta { get; }
+// Riesgo delta.
         public float       RiskDelta   { get; }
 
+// Realiza noticias template
         public NewsTemplate(string h, string b, NewsCategory c, float f, float d, float r)
         { Headline = h; Body = b; Category = c; FuelDelta = f; DemandDelta = d; RiskDelta = r; }
     }

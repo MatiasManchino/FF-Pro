@@ -5,6 +5,10 @@ using System.Text;
 using System.Globalization;
 
 [RequireComponent(typeof(Camera))]
+
+// Controla la cámara del mapa 3D: orbita, zoom, arrastre e interacción con marcadores de ciudad.
+// Incluye funcionalidades para seguir ciudades, bloquear la cámara y navegación por teclado.
+
 public class MapCameraController : MonoBehaviour
 {
     [Header("Target")]
@@ -12,7 +16,7 @@ public class MapCameraController : MonoBehaviour
 
     [Header("Zoom")]
     public float initialDistance = 2500f;
-    public float minDistance     = 1470f;
+    public float minDistance     = 1200f;
     public float maxDistance     = 7000f;
     [Tooltip("Fracción de la distancia actual por unidad de scroll.")]
     public float zoomSpeed       = 0.06f;
@@ -26,7 +30,7 @@ public class MapCameraController : MonoBehaviour
     [Range(0.01f, 0.5f)]
     public float orbitSmooth     = 0.08f;
 
-    // ── Target state ─────────────────────────────────────────────────────────
+    // ── Objetivo state ─────────────────────────────────────────────────────────
     private float   _tgtRotX;
     private float   _tgtRotY;
     private float   _tgtDist;
@@ -71,14 +75,22 @@ public class MapCameraController : MonoBehaviour
 
     private Camera _cam;
 
+// Devuelve el zoom porcentaje
     public float ZoomPercent =>
         (1f - Mathf.Clamp01((_sDist - minDistance) / Mathf.Max(maxDistance - minDistance, 1f))) * 100f;
+
+
+    // Indica si la cámara está bloqueada manualmente por el usuario.
 
     public bool IsManuallyLocked => _manualLock;
 
     // Coordenadas de Buenos Aires para el respaldo
     private const float BA_LAT = -38.46f;
     private const float BA_LON = -58.38f;
+
+
+    // Inicialización temprana: obtiene la referencia a la cámara y el transform del planeta.
+    // Se ejecuta antes de Start().
 
     void Awake()
     {
@@ -87,6 +99,7 @@ public class MapCameraController : MonoBehaviour
             earthTransform = WorldMap.Instance.transform;
     }
 
+// Inicializa el marcador: obtiene referencias, posiciona el objeto, crea el label y registra la ciudad.
     void Start()
     {
         if (earthTransform == null)
@@ -100,9 +113,13 @@ public class MapCameraController : MonoBehaviour
         _sDist     = initialDistance;
         _tgtLookAt = _sLookAt = earthTransform.position;
 
-        // Esperar un frame para que los CityMarker se hayan posicionado
+        // Esperar un fotograma para que los CityMarker se hayan posicionado
         StartCoroutine(InitFollow());
     }
+
+
+    // Corutina que inicializa la lista de ciudades y pone la cámara enfocada en Buenos Aires por defecto.
+    // Espera un par de frames para asegurar que los `CityMarker` estén posicionados.
 
     private IEnumerator InitFollow()
     {
@@ -120,14 +137,29 @@ public class MapCameraController : MonoBehaviour
         }
         
         StartPermanentFollow("Buenos Aires", BA_LAT, BA_LON);
+
+        // Arrancar con FIJAR activo: esperar a que la cámara se ubique sobre Buenos Aires y bloquear.
+        yield return null;
+        yield return null;
+        if (!_manualLock) LockToCurrentPosition();
     }
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
     void Update()
     {
-        if (_followPermanent && _followTarget != null && !(_manualLock && _dragging && _didDrag))
+        if (_followPermanent && _followTarget != null)
+        {
             UpdateFollowTargetFromTransform();
+            _earthYInit = false;          // al volver a modo libre, re-sincroniza sin salto
+        }
+        else
+        {
+            // Modo libre: la cámara acompaña la rotación de la Tierra para que el globo se vea estable
+            // (el día/noche lo da el sol). Sin esto, al soltar el FIJAR el globo "gira descontroladamente".
+            CompensateEarthSpin();
+        }
 
-        HandleMousePause();
+        // HandleMousePause();  // desactivado: el juego ya no se pausa al hacer clic en el mapa
         HandleDrag();
         HandleZoom();
         HandleCityNavigation();
@@ -136,7 +168,30 @@ public class MapCameraController : MonoBehaviour
         SmoothAndApply();
     }
 
+    // ── Compensación de la rotación de la Tierra (globo estable en modo libre) ──
+    private bool  _earthYInit;
+    private float _lastEarthY;
+
+    private void CompensateEarthSpin()
+    {
+        if (earthTransform == null) return;
+        float earthY = earthTransform.eulerAngles.y;
+        if (!_earthYInit) { _lastEarthY = earthY; _earthYInit = true; return; }
+
+        float d = Mathf.DeltaAngle(_lastEarthY, earthY);
+        _lastEarthY = earthY;
+        if (Mathf.Abs(d) < 0.0001f) return;
+
+        // La cámara orbita lo mismo que rotó la Tierra → el globo se ve quieto; el arrastre se suma encima.
+        _tgtRotY = NormalizeAngle(_tgtRotY + d);
+        _sRotY   = NormalizeAngle(_sRotY + d);
+    }
+
     // ── Navegación por ciudades con teclado ──────────────────────────────────
+
+    // Maneja la navegación por ciudades usando teclado, búsqueda por nombre y selección rápida.
+    // Permite escribir el nombre de la ciudad, navegar con flechas y enfocar con Home.
+
     private void HandleCityNavigation()
     {
         if (_allCities.Count == 0) return;
@@ -181,6 +236,7 @@ public class MapCameraController : MonoBehaviour
             }
             else
             {
+// Foreach
                 foreach (char c in Input.inputString)
                 {
                     if (c == '\b') continue;
@@ -196,6 +252,10 @@ public class MapCameraController : MonoBehaviour
         }
     }
 
+
+    // Cambia el índice de ciudad actual en la dirección indicada y centra la cámara
+    // en la ciudad resultante. Si la cámara está bloqueada mantendrá el lock en la nueva ciudad.
+
     private void NavigateToCity(int direction)
     {
         if (_allCities.Count == 0) return;
@@ -203,6 +263,7 @@ public class MapCameraController : MonoBehaviour
         _currentCityIndex += direction;
         if (_currentCityIndex >= _allCities.Count)
             _currentCityIndex = 0;
+        // Realiza if
         else if (_currentCityIndex < 0)
             _currentCityIndex = _allCities.Count - 1;
 
@@ -227,6 +288,9 @@ public class MapCameraController : MonoBehaviour
             FocusOnCity(targetCity.latitude, targetCity.longitude);
         }
     }
+
+
+    // Busca una ciudad por nombre (con y sin coincidencia parcial) y la enfoca si se encuentra.
 
     private void FindAndFocusCity(string searchName)
     {
@@ -255,11 +319,15 @@ public class MapCameraController : MonoBehaviour
         }
     }
 
+
+    // Quita diacríticos (acentos) de una cadena para normalizar búsquedas comparativas.
+
     private string RemoveDiacritics(string text)
     {
         string normalizedString = text.Normalize(NormalizationForm.FormD);
         var stringBuilder = new StringBuilder();
 
+// Foreach
         foreach (char c in normalizedString)
         {
             UnicodeCategory unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
@@ -272,7 +340,7 @@ public class MapCameraController : MonoBehaviour
         return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
     }
 
-    // ── Seguimiento permanente ──────────────────────────────────────────────
+    // Inicio permanente seguimiento.
     private void StartPermanentFollow(string cityName, float lat, float lon)
     {
         if (_followRoutine != null)
@@ -304,8 +372,27 @@ public class MapCameraController : MonoBehaviour
         }
     }
 
+    // Sigue permanentemente a un Transform en movimiento (vehículo en tránsito), acercando la cámara.
+    public void FollowTransform(Transform target)
+    {
+        if (target == null) return;
+        if (_followRoutine != null) { StopCoroutine(_followRoutine); _followRoutine = null; }
+        _manualLock = false;
+        if (_lockAnchor != null) { Destroy(_lockAnchor); _lockAnchor = null; }
+        _followTarget    = target;
+        _followPermanent = true;
+        _isFollowing     = true;
+        _inertiaX = _inertiaY = 0f;
+        SetCameraToTarget(target);
+        _tgtDist = minDistance + (maxDistance - minDistance) * 0.12f;   // acercar al vehículo
+    }
+
+    // Ajusta la cámara para apuntar a un `Transform` objetivo (por ejemplo, un marcador de ciudad).
+    // Calcula las rotaciones y distancia objetivo a partir de la posición del objetivo.
+
     private void SetCameraToTarget(Transform target)
     {
+    
         if (earthTransform == null) return;
         Vector3 earthCenter = earthTransform.position;
         Vector3 targetWorldPos = target.position;
@@ -317,6 +404,10 @@ public class MapCameraController : MonoBehaviour
         _tgtLookAt = earthCenter;
         SnapSmoothedToTarget();
     }
+
+
+    // Ajusta la cámara para apuntar a una latitud/longitud concretas sobre el planeta.
+    // Convierte lat/lon a dirección y calcula rotaciones objetivo.
 
     private void SetCameraToLatLon(float lat, float lon)
     {
@@ -334,6 +425,7 @@ public class MapCameraController : MonoBehaviour
         SnapSmoothedToTarget();
     }
 
+// Acomoda smoothed to objetivo
     private void SnapSmoothedToTarget()
     {
         _sRotX = _tgtRotX; _velRotX = 0f;
@@ -343,13 +435,14 @@ public class MapCameraController : MonoBehaviour
         _inertiaX = _inertiaY = 0f;
     }
 
+// Gestiona ratón pausa.
     private void HandleMousePause()
     {
         if (TimeManager.Instance == null) return;
 
         if (Input.GetMouseButtonDown(0))
         {
-            // No pausar si el click es sobre la UI (botones superiores)
+            // No pausar si el clic es sobre la UI (botones superiores)
             if (IsMouseOverUI()) return;
             
             _savedSpeedIndex = TimeManager.Instance.CurrentSpeedIndex;
@@ -363,6 +456,7 @@ public class MapCameraController : MonoBehaviour
             _savedSpeedIndex = -1;
         }
     }
+// Gestiona arrastre.
     private void HandleDrag()
     {
         if (_isFollowing && !_followPermanent) return;
@@ -375,8 +469,10 @@ public class MapCameraController : MonoBehaviour
             _prevMousePx  = Input.mousePosition;
             _inertiaX     = _inertiaY = 0f;
 
-            if (!_manualLock && _followPermanent)
+            // Al clickear y arrastrar el mapa se SUELTA el FIJAR (y el seguimiento) para girar libre.
+            if (_followPermanent || _manualLock)
             {
+                _manualLock      = false;
                 _followPermanent = false;
                 _isFollowing     = false;
                 _followTarget    = null;
@@ -427,6 +523,7 @@ public class MapCameraController : MonoBehaviour
                 _inertiaX = _inertiaY = 0f;
                 if (_didDrag) UpdateLockAnchor();
             }
+            // Realiza if
             else if (!_didDrag)
             {
                 _inertiaX = _inertiaY = 0f;
@@ -445,6 +542,7 @@ public class MapCameraController : MonoBehaviour
         }
     }
 
+// Aplica inercia
     private void ApplyInertia()
     {
         if (_dragging || _isFollowing) return;
@@ -464,10 +562,12 @@ public class MapCameraController : MonoBehaviour
         _inertiaY *= k;
     }
 
+// Gestiona zoom.
     private void HandleZoom()
     {
         if (_isFollowing && !_followPermanent) return;
 
+        if (IsMouseOverUI()) return;   // el scroll sobre paneles UI no debe acercar/alejar el mapa
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if (Mathf.Abs(scroll) < 0.001f) return;
 
@@ -476,6 +576,7 @@ public class MapCameraController : MonoBehaviour
         _inertiaX = _inertiaY = 0f;
     }
 
+// Suaviza and aplica.
     private void SmoothAndApply()
     {
         if (_followPermanent && _followTarget != null)
@@ -508,6 +609,7 @@ public class MapCameraController : MonoBehaviour
         _justReleasedLock = false;
     }
 
+// Enfoque on ciudad.
     public void FocusOnCity(float lat, float lon)
     {
         if (_followRoutine != null) StopCoroutine(_followRoutine);
@@ -515,14 +617,14 @@ public class MapCameraController : MonoBehaviour
         if (_justReleasedLock)
         {
             SnapToLatLon(lat, lon);
-            // _justReleasedLock se resetea en el próximo Update después de SmoothAndApply
+            // _justReleasedLock se resetea en el próximo Actualiza después de SmoothAndApply
             return;
         }
         
         _followRoutine = StartCoroutine(FocusRoutine(lat, lon));
     }
 
-    // Método nuevo
+    // Acomoda to lat lon
     private void SnapToLatLon(float lat, float lon)
     {
         if (WorldMap.Instance == null || earthTransform == null) return;
@@ -540,6 +642,7 @@ public class MapCameraController : MonoBehaviour
         _inertiaX = _inertiaY = 0f;
     }
 
+// Enfoque routine.
     private IEnumerator FocusRoutine(float lat, float lon)
     {
         _isFollowing = true;
@@ -566,6 +669,7 @@ public class MapCameraController : MonoBehaviour
         _isFollowing = false;
     }
 
+// Restablece cámara posición
     public void ResetCameraPosition()
     {
         ReleaseLockIfNeeded();
@@ -605,6 +709,7 @@ public class MapCameraController : MonoBehaviour
         }
     }
 
+// Actualiza seguimiento objetivo from transform
     private void UpdateFollowTargetFromTransform()
     {
         if (_followTarget == null || earthTransform == null) return;
@@ -618,10 +723,13 @@ public class MapCameraController : MonoBehaviour
         _tgtLookAt = earthCenter;
     }
 
+// Normaliza ángulo.
     private static float NormalizeAngle(float a) => ((a % 360f) + 360f) % 360f;
 
+// Inicializa ialize cámara posición.
     public void InitializeCameraPosition() { }
 
+// Actualiza bloqueo anchor
     private void UpdateLockAnchor()
     {
         if (WorldMap.Instance == null || earthTransform == null) return;
@@ -636,6 +744,7 @@ public class MapCameraController : MonoBehaviour
         _followTarget = _lockAnchor.transform;
     }
 
+// Bloqueo to actual posición.
     public void LockToCurrentPosition()
     {
         if (_manualLock)
@@ -657,6 +766,7 @@ public class MapCameraController : MonoBehaviour
         _inertiaX = _inertiaY = 0f;
     }
 
+// Libera bloqueo if needed.
     private void ReleaseLockIfNeeded()
     {
         if (_manualLock)
@@ -669,22 +779,27 @@ public class MapCameraController : MonoBehaviour
         }
     }
 
-    // ── Detección de UI ──────────────────────────────────────────────────────
+    // Indica si ratón terminado UI.
     private static bool IsMouseOverUI()
     {
         var es = UnityEngine.EventSystems.EventSystem.current;
         return es != null && es.IsPointerOverGameObject();
     }
+// Devuelve el ciudad nombre actual
     public string CurrentCityName => 
         (_currentCityIndex >= 0 && _currentCityIndex < _allCities.Count) 
         ? _allCities[_currentCityIndex].cityName 
         : "";
 
+// Devuelve el total de ciudades
     public int TotalCities => _allCities.Count;
 
+// Devuelve el ciudad number actual
     public int CurrentCityNumber => _currentCityIndex + 1;
 
+// Indica si typing ciudad nombre
     public bool IsTypingCityName => _isTypingCityName;
 
+// Devuelve el ciudad búsqueda string
     public string CitySearchString => _citySearchString;
 }

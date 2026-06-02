@@ -32,6 +32,7 @@ namespace FreightForwarder.UI
         private int  _lastDay = -1;
 
         private static Font _fontCache;
+// Devuelve el font
         private static Font _font => _fontCache != null
             ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
 
@@ -41,11 +42,13 @@ namespace FreightForwarder.UI
         private const float PANEL_W = 214f;
         private const float PANEL_H = 110f;
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        // Se ejecuta durante Awake al iniciar el componente.
 
         private void Awake()  => BuildUI();
+// Se ejecuta al iniciar el componente.
         private void Start()  => SubscribeEvents();
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         private void OnDestroy()
         {
             if (EconomyManager.Instance != null)
@@ -64,8 +67,16 @@ namespace FreightForwarder.UI
             }
             if (EventManager.Instance != null)
                 EventManager.Instance.OnEventTriggered -= OnEventTriggered;
+            if (PaymentManager.Instance != null)
+                PaymentManager.Instance.OnPaymentReceived -= OnPaymentReceived;
+            if (ClientManager.Instance != null)
+            {
+                ClientManager.Instance.OnClientTierUp      -= OnClientTierUp;
+                ClientManager.Instance.OnClientBlacklisted -= OnClientBlacklisted;
+            }
         }
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
         private void Update()
         {
             bool anyAlive = false;
@@ -86,7 +97,7 @@ namespace FreightForwarder.UI
             }
         }
 
-        // ── UI construction ───────────────────────────────────────────────────
+        // Construye UI.
 
         private void BuildUI()
         {
@@ -136,6 +147,7 @@ namespace FreightForwarder.UI
             }
         }
 
+// Refresca visualización
         private void RefreshDisplay()
         {
             if (_moneyText == null) return;
@@ -183,7 +195,7 @@ namespace FreightForwarder.UI
             }
         }
 
-        // ── Notifications ─────────────────────────────────────────────────────
+        // Agrega notificación.
 
         private void AddNotification(string text, Color color)
         {
@@ -191,7 +203,7 @@ namespace FreightForwarder.UI
             if (_notifications.Count > MAX_NOTIFS) _notifications.RemoveAt(MAX_NOTIFS);
         }
 
-        // ── Event subscriptions ───────────────────────────────────────────────
+        // Registra eventos.
 
         private void SubscribeEvents()
         {
@@ -211,24 +223,70 @@ namespace FreightForwarder.UI
             }
             if (EventManager.Instance != null)
                 EventManager.Instance.OnEventTriggered += OnEventTriggered;
+            if (PaymentManager.Instance != null)
+                PaymentManager.Instance.OnPaymentReceived += OnPaymentReceived;
+            if (ClientManager.Instance != null)
+            {
+                ClientManager.Instance.OnClientTierUp      += OnClientTierUp;
+                ClientManager.Instance.OnClientBlacklisted += OnClientBlacklisted;
+            }
         }
 
+// Se invoca cuando cambia el dinero.
         private void OnMoneyChanged(int v) { _dirty = true; }
+// Se invoca cuando cambia la reputación.
         private void OnRepChanged(int v)   { _dirty = true; if (v <= 20) AddNotification($"⚠️  Reputación crítica: {v}/100", new Color(1f, 0.3f, 0.2f)); }
+// Se invoca cuando el jugador sube de nivel.
         private void OnLevelUp(int l)      { _dirty = true; AddNotification($"⭐  ¡Subiste al Nivel {l}!  +${l * 100:N0}", Color.yellow); }
+// Se invoca cuando el juego termina.
         private void OnGameOver()          { AddNotification("💀  GAME OVER", new Color(1f, 0.2f, 0.2f)); }
 
+// Se invoca cuando un cargamento se completa.
         private void OnCargoCompleted(Cargo c)
-            { _dirty = true; AddNotification($"✅  {Route(c)}  +${c.FinalPrice - c.AgentCost:N0}", new Color(0.2f, 0.9f, 0.4f)); }
+        {
+            _dirty = true;
+            int done = EconomyManager.Instance?.TotalCargosCompleted ?? 0; // ya incrementado al entregar
+            if (done <= Constants.PAYMENT_GRACE_OPERATIONS)
+                AddNotification($"✅  Entregado: {Route(c)}  ·  cobro ${Mathf.Max(0, c.FinalPrice - c.AgentCost):N0} (gracia)",
+                    new Color(0.2f, 0.9f, 0.4f));
+            else
+                AddNotification($"✅  Entregado: {Route(c)}  ·  -${c.AgentCost:N0} transportista, cobro ${c.FinalPrice:N0} pendiente",
+                    new Color(0.95f, 0.8f, 0.3f));
+        }
+// Se invoca cuando se recibe pago.
+        private void OnPaymentReceived(PendingPayment p)
+        {
+            _dirty = true;
+            string tag = p.Timing == PaymentTiming.Late  ? "  (atrasado)"
+                       : p.Timing == PaymentTiming.Early ? "  (anticipado)" : "";
+            AddNotification($"💰  Cobraste ${p.Amount:N0} de {p.ClientName}{tag}", new Color(0.3f, 0.9f, 0.5f));
+        }
+// Se invoca cuando un cliente asciende de categoría.
+        private void OnClientTierUp(Client c, ClientTier t)
+        {
+            _dirty = true;
+            string ico = t == ClientTier.Diamante ? "💎" : "⭐";
+            AddNotification($"{ico}  {c.CompanyName} subió a cliente {c.GetTierName()}", new Color(0.5f, 0.85f, 1f));
+        }
+// Se invoca cuando un cliente es puesto en lista negra.
+        private void OnClientBlacklisted(Client c)
+        {
+            _dirty = true;
+            AddNotification($"🚫  {c.CompanyName} te puso en su lista negra", new Color(1f, 0.35f, 0.3f));
+        }
+// Se invoca cuando un cargamento falla.
         private void OnCargoFailed(Cargo c)
             { _dirty = true; AddNotification($"❌  Falló: {Route(c)}", new Color(1f, 0.4f, 0.2f)); }
+// Se invoca cuando cargamento expira.
         private void OnCargoExpired(Cargo c)
             { _dirty = true; AddNotification($"⏰  Expiró: {Route(c)}", new Color(0.8f, 0.6f, 0.2f)); }
+// Se invoca cuando se activa un evento.
         private void OnEventTriggered(GameEvent e, Cargo c)
             => AddNotification($"⚠️  {e.Name}  [{Route(c)}]", new Color(1f, 0.6f, 0.1f));
 
+// Ruta.
         private static string Route(Cargo c)
-            => $"{c.OriginCityId.Replace('_', ' ')} → {c.DestinationCityId.Replace('_', ' ')}";
+            => $"{CityDatabase.DisplayNameOf(c.OriginCityId)} → {CityDatabase.DisplayNameOf(c.DestinationCityId)}";
 
         // ── UGUI factory helpers ──────────────────────────────────────────────
 
@@ -286,6 +344,7 @@ namespace FreightForwarder.UI
             return rt;
         }
 
+// Gestiona make imagen.
         private static Image MakeImage(RectTransform rt, Color color)
         {
             var img = rt.gameObject.AddComponent<Image>();
@@ -310,6 +369,7 @@ namespace FreightForwarder.UI
             return t;
         }
 
+// Gestiona make bar.
         private static Image MakeBar(string name, RectTransform parent, Vector2 offset, Vector2 size)
         {
             // Background
@@ -330,6 +390,7 @@ namespace FreightForwarder.UI
             return fill;
         }
 
+// Establece bar.
         private static void SetBar(Image fill, float amount, Color color)
         {
             fill.fillAmount = Mathf.Clamp01(amount);

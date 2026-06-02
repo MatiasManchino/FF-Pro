@@ -3,10 +3,10 @@ using UnityEngine;
 
 namespace FreightForwarder.Weather
 {
-    /// <summary>
-    /// Controla el sprite del huracán: rotación del ojo, animación de formación
-    /// desde los bordes hacia el centro, y drift suave sobre el mapa.
-    /// </summary>
+
+    // Controla el sprite del huracán: rotación del ojo, animación de formación
+    // desde los bordes hacia el centro, y drift suave sobre el mapa.
+
     public class HurricaneController : Singleton<HurricaneController>
     {
         [SerializeField] private float rotationSpeed   = 0.35f;  // rad/s (sentido horario)
@@ -38,7 +38,7 @@ namespace FreightForwarder.Weather
         private static readonly int PropBuild   = Shader.PropertyToID("_BuildProgress");
         private static readonly int PropRot     = Shader.PropertyToID("_Rotation");
 
-        // ── Init ─────────────────────────────────────────────────────────────
+        // Inicializa ialize.
 
         public void Initialize(Texture2D hurricaneTex)
         {
@@ -85,14 +85,16 @@ namespace FreightForwarder.Weather
             _go.SetActive(true);
         }
 
+// Gestiona deactivate.
         public void Deactivate()
         {
             _active = false;
         }
 
+// Indica si active
         public bool IsActive => _active;
 
-        // ── Update ───────────────────────────────────────────────────────────
+        // Ejecuta las comprobaciones necesarias en cada fotograma del juego.
 
         private void Update()
         {
@@ -159,6 +161,7 @@ namespace FreightForwarder.Weather
             _go.transform.rotation = Quaternion.LookRotation(worldOutward, northTangent);
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();

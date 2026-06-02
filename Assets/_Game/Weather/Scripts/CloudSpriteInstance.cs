@@ -2,16 +2,17 @@ using UnityEngine;
 
 namespace FreightForwarder.Weather
 {
-    /// <summary>
-    /// Sprite de nube posicionado sobre el globo.
-    /// Tangent-aligned (plano sobre la superficie), visible desde el exterior como imagen satelital.
-    /// La deriva sigue la circulación atmosférica real: Hadley, Ferrel y células polares.
-    /// </summary>
+
+    // Sprite de nube posicionado sobre el globo.
+    // Tangent-aligned (plano sobre la superficie), visible desde el exterior como imagen satelital.
+    // La deriva sigue la circulación atmosférica real: Hadley, Ferrel y células polares.
+
     public class CloudSpriteInstance : MonoBehaviour
     {
         public float Lat;
         public float Lon;
         public float TargetAlpha;
+// Ejecuta local
         public float DriftLon;   // perturbación de turbulencia local (no la corriente principal)
         public float DriftLat;
         public bool  IsStorm;
@@ -40,7 +41,9 @@ namespace FreightForwarder.Weather
 
         private const float CLOUD_HEIGHT = 60f;
 
+// Devuelve el despawning
         public bool Despawning => _despawning;
+// Dead
         public bool Dead       => _currentAlpha <= 0.001f && (_despawning || _age >= _lifetime);
 
         // ── Init ─────────────────────────────────────────────────────────────
@@ -74,7 +77,7 @@ namespace FreightForwarder.Weather
             _stretchX   = 1f;
             _stretchY   = 1f;
 
-            // Cache earth transform and localR once — they never change at runtime.
+            // Caché earth transform and localR once — they never change at runtime.
             if (WorldMap.Instance != null)
             {
                 float earthR    = WorldMap.Instance.earthRadius;
@@ -105,7 +108,7 @@ namespace FreightForwarder.Weather
             _mat.SetFloat(PropAlpha, _currentAlpha);
         }
 
-        // ── Update ───────────────────────────────────────────────────────────
+        // Ejecuta las comprobaciones necesarias en cada fotograma del juego.
 
         private void Update()
         {
@@ -173,8 +176,10 @@ namespace FreightForwarder.Weather
             if (Dead) { CloudRenderer.Instance?.Release(this); return; }
         }
 
+// Gestiona begin despawn.
         public void BeginDespawn() => _despawning = true;
 
+// Calcula daylight factor
         private float ComputeDaylightFactor()
         {
             if (_sun == null || _earthTransform == null) return 1f;
@@ -198,6 +203,7 @@ namespace FreightForwarder.Weather
             transform.rotation = Quaternion.LookRotation(worldOutward, northTangent);
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         private void OnDestroy()
         {
             if (_mat != null) Destroy(_mat);
@@ -205,13 +211,13 @@ namespace FreightForwarder.Weather
 
         // ── Circulación atmosférica ───────────────────────────────────────────
 
-        /// <summary>
-        /// Calcula la velocidad de deriva en grados/segundo según la latitud.
-        /// Célula de Hadley (0-30°): vientos alisios → movimiento hacia el OESTE.
-        /// Célula de Ferrel (30-60°): vientos del oeste → movimiento hacia el ESTE.
-        /// Célula Polar (60-90°): alisios polares del este → movimiento hacia el OESTE.
-        /// Transiciones suavizadas con SmoothStep para evitar saltos bruscos.
-        /// </summary>
+
+        // Calcula la velocidad de deriva en grados/segundo según la latitud.
+        // Célula de Hadley (0-30°): vientos alisios → movimiento hacia el OESTE.
+        // Célula de Ferrel (30-60°): vientos del oeste → movimiento hacia el ESTE.
+        // Célula Polar (60-90°): alisios polares del este → movimiento hacia el OESTE.
+        // Transiciones suavizadas con SmoothStep para evitar saltos bruscos.
+
         private static void GetAtmosphericDrift(float lat, out float driftLon, out float driftLat)
         {
             float absLat = Mathf.Abs(lat);
@@ -233,7 +239,7 @@ namespace FreightForwarder.Weather
             driftLat = 0f;
         }
 
-        // ── Utilidad compartida ───────────────────────────────────────────────
+        // Latitud longitud to dir.
 
         public static Vector3 LatLonToDir(float lat, float lon)
         {

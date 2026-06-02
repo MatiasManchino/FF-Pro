@@ -4,36 +4,38 @@ using UnityEngine;
 
 namespace FreightForwarder.Models
 {
+    // Una ciudad del mundo: sus datos (nombre, país, continente), su posición geográfica
+    // (latitud/longitud), qué infraestructura tiene (puerto, aeropuerto, hub terrestre) y
+    // si el jugador ya la desbloqueó. [Serializable] permite guardarla y verla en el inspector.
     [Serializable]
     public class WorldCity
     {
-        // Identificación
-        public string Id { get; set; }
-        public string DisplayName { get; set; }
-        public string Country { get; set; }
-        public string Continent { get; set; }
+        public string Id { get; set; }           // identificador interno (ej. "buenos_aires")
+        public string DisplayName { get; set; }  // nombre para mostrar (ej. "Buenos Aires")
+        public string Country { get; set; }      // país
+        public string Continent { get; set; }    // continente
 
-        // Coordenadas
-        public float Latitude { get; set; }
-        public float Longitude { get; set; }
+        public float Latitude { get; set; }      // latitud geográfica
+        public float Longitude { get; set; }     // longitud (en coordenadas del mapa del juego)
 
-        // Infraestructura
-        public bool HasPort { get; set; }
-        public bool HasAirport { get; set; }
-        public bool IsLandHub { get; set; }
-        public bool IsMajorHub { get; set; }
+        public bool HasPort { get; set; }     // tiene puerto marítimo
+        public bool HasAirport { get; set; }  // tiene aeropuerto
+        public bool IsLandHub { get; set; }   // es un nodo de transporte terrestre
+        public bool IsMajorHub { get; set; }  // es un hub importante (mucho tráfico)
 
-        // Progresión
-        public bool IsUnlocked { get; set; }
-        public int UnlockCost { get; set; }
-        public int UnlockTier { get; set; }
-        public int Popularity { get; set; }
+        public bool IsUnlocked { get; set; }  // el jugador ya puede operar en esta ciudad
+        public int UnlockCost { get; set; }   // cuánto cuesta desbloquearla
+        public int UnlockTier { get; set; }   // nivel/categoría de desbloqueo
+        public int Popularity { get; set; }   // qué tan demandada es (afecta cuántas cargas aparecen)
 
-        // Zona terrestre
+        // "Zona terrestre": agrupa ciudades conectadas por tierra (mismo continente/región).
+        // Sólo se puede ir por camión/tren entre ciudades de la misma zona.
         public string LandZone { get; set; }
 
+        // Constructor vacío: necesario para guardar/cargar la ciudad desde disco.
         public WorldCity() { }
 
+        // Constructor principal: completa todos los datos y deduce la zona terrestre.
         public WorldCity(string id, string displayName, string country, string continent,
                          float latitude, float longitude,
                          bool hasPort, bool hasAirport, bool isLandHub, bool isMajorHub,
@@ -56,6 +58,9 @@ namespace FreightForwarder.Models
             LandZone = DetermineLandZone(continent, country);
         }
 
+        // Decide a qué "zona terrestre" pertenece la ciudad según su continente y país.
+        // Las islas (Japón, Filipinas, etc.) y el Reino Unido quedan SIN zona ("") porque
+        // no tienen conexión terrestre con el resto: a ellas sólo se llega por mar o aire.
         private string DetermineLandZone(string continent, string country)
         {
             switch (continent)
@@ -70,7 +75,7 @@ namespace FreightForwarder.Models
                 {
                     string[] islands = { "Japan", "Philippines", "Indonesia", "Sri Lanka", "Taiwan" };
                     foreach (var island in islands)
-                        if (country == island) return "";
+                        if (country == island) return "";   // isla: sin conexión terrestre
                     return "asia_continental";
                 }
                 case "Africa": return "africa_continental";
@@ -78,6 +83,8 @@ namespace FreightForwarder.Models
             }
         }
 
+        // ¿Se puede ir por tierra desde esta ciudad hasta "other"?
+        // Sólo si ambas tienen zona terrestre y es la MISMA zona.
         public bool CanLandTransportTo(WorldCity other)
         {
             if (string.IsNullOrEmpty(LandZone) || string.IsNullOrEmpty(other.LandZone))
@@ -85,6 +92,8 @@ namespace FreightForwarder.Models
             return LandZone == other.LandZone;
         }
 
+        // Convierte la latitud/longitud de la ciudad a un punto 3D sobre una esfera del radio dado
+        // (sirve para ubicar el marcador de la ciudad sobre el globo terráqueo).
         public Vector3 ToSpherePosition(float radius)
         {
             float latRad = Latitude * Mathf.Deg2Rad;
@@ -96,8 +105,11 @@ namespace FreightForwarder.Models
             );
         }
 
+        // Devuelve la posición como un par (latitud, longitud).
         public Vector2 ToVector2() => new Vector2(Latitude, Longitude);
 
+        // Distancia en kilómetros entre esta ciudad y "other", sobre la superficie de la Tierra.
+        // Usa la fórmula de Haversine (distancia "de gran círculo"); R = 6371 km es el radio terrestre.
         public float DistanceTo(WorldCity other)
         {
             const float R = 6371f;
@@ -113,6 +125,7 @@ namespace FreightForwarder.Models
             return R * c;
         }
 
+        // Texto legible de la ciudad, útil para depurar (ej. "Buenos Aires, Argentina (buenos_aires)").
         public override string ToString() => $"{DisplayName}, {Country} ({Id})";
     }
 }

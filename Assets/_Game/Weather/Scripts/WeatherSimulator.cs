@@ -6,6 +6,7 @@ namespace FreightForwarder.Weather
     // Stateless helpers: update cloud, storm, and cyclone values on each tick.
     public static class WeatherSimulator
     {
+// Actualiza clouds
         public static void UpdateClouds(WeatherCell cell, int x, int y, float timeOffset, WeatherConfig cfg)
         {
             float nx = (x + cell.noiseSeed + timeOffset) * cfg.noiseScale;
@@ -14,6 +15,7 @@ namespace FreightForwarder.Weather
             cell.cloud = Mathf.Lerp(cell.cloud, target, cfg.cloudGrowthSpeed);
         }
 
+// Actualiza storms
         public static void UpdateStorms(WeatherCell cell, WeatherConfig cfg)
         {
             if (!cell.isStorming && cell.cloud > cfg.cloudThresholdForStorm)
@@ -38,6 +40,7 @@ namespace FreightForwarder.Weather
             }
         }
 
+// Actualiza cyclones
         public static void UpdateCyclones(WeatherCell cell, WeatherConfig cfg)
         {
             if (cell.isStorming && !cell.isCyclone && cell.storm > cfg.stormThresholdForCyclone)

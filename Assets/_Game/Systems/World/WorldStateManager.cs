@@ -5,17 +5,19 @@ using UnityEngine;
 
 namespace FreightForwarder.Systems.World
 {
-    /// <summary>
-    /// Estado económico global del mundo: combustible, demanda, riesgo.
-    /// Los managers existentes leen estos multiplicadores para escalar precios/probabilidades.
-    /// Se actualiza mensualmente y puede ser afectado por noticias y eventos globales.
-    /// </summary>
+
+    // Estado económico global del mundo: combustible, demanda, riesgo.
+    // Los managers existentes leen estos multiplicadores para escalar precios/probabilidades.
+    // Se actualiza mensualmente y puede ser afectado por noticias y eventos globales.
+
     public class WorldStateManager : Singleton<WorldStateManager>
     {
-        // ── Multiplicadores globales ──────────────────────────────────────────
+        // Combustible multiplier.
 
         public float FuelMultiplier   { get; private set; } = 1f;
+// Demanda multiplier.
         public float DemandMultiplier { get; private set; } = 1f;
+// Riesgo multiplier.
         public float RiskMultiplier   { get; private set; } = 1f;
 
         // Tendencias suaves (lerp mensual)
@@ -29,12 +31,13 @@ namespace FreightForwarder.Systems.World
         public event Action<string, float> OnDemandChanged;
         public event Action<string, float> OnRiskChanged;
 
-        // ── Historial para UI ─────────────────────────────────────────────────
+        // Combustible historial 1 m.
 
         public float FuelHistory_1M   { get; private set; } = 1f;
+// Demanda historial 1 m.
         public float DemandHistory_1M { get; private set; } = 1f;
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        // Se ejecuta al iniciar el componente.
 
         private void Start()
         {
@@ -42,6 +45,7 @@ namespace FreightForwarder.Systems.World
                 FFTimeManager.Instance.OnMonthPassed += OnMonthPassed;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -49,7 +53,7 @@ namespace FreightForwarder.Systems.World
                 FFTimeManager.Instance.OnMonthPassed -= OnMonthPassed;
         }
 
-        // ── Tick mensual ──────────────────────────────────────────────────────
+        // Se invoca cuando mes transcurre.
 
         private void OnMonthPassed()
         {
@@ -87,19 +91,21 @@ namespace FreightForwarder.Systems.World
             Debug.Log($"[WorldState] FuelShock: {delta:+0.00} — {reason}");
         }
 
+// Aplica demand shock
         public void ApplyDemandShock(float delta, string reason)
         {
             _targetDemand = Mathf.Clamp(_targetDemand + delta, 0.5f, 2.0f);
             OnDemandChanged?.Invoke(reason, _targetDemand);
         }
 
+// Aplica risk shock
         public void ApplyRiskShock(float delta, string reason)
         {
             _targetRisk = Mathf.Clamp(_targetRisk + delta, 0.7f, 2.0f);
             OnRiskChanged?.Invoke(reason, _targetRisk);
         }
 
-        // ── Helpers ───────────────────────────────────────────────────────────
+        // Obtiene fuel trend
 
         public string GetFuelTrend()
         {
@@ -109,6 +115,7 @@ namespace FreightForwarder.Systems.World
             return "→";
         }
 
+// Obtiene demand trend
         public string GetDemandTrend()
         {
             float d = DemandMultiplier - DemandHistory_1M;

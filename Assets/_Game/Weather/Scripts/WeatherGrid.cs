@@ -5,11 +5,14 @@ namespace FreightForwarder.Weather
 {
     public class WeatherGrid
     {
+// Ancho.
         public int Width  { get; }
+// Alto.
         public int Height { get; }
 
         private readonly WeatherCell[] _cells;
 
+// Realiza clima rejilla
         public WeatherGrid(int width, int height)
         {
             Width  = width;
@@ -20,6 +23,7 @@ namespace FreightForwarder.Weather
                 _cells[i] = new WeatherCell { noiseSeed = Random.value * 100f };
         }
 
+// Obtiene cell
         public WeatherCell GetCell(int x, int y)
         {
             x = (int)Mathf.Repeat(x, Width);
@@ -27,7 +31,7 @@ namespace FreightForwarder.Weather
             return _cells[y * Width + x];
         }
 
-        // lat: -90..90, lon: -180..180
+        // Obtiene cell at lat lon
         public WeatherCell GetCellAtLatLon(float lat, float lon)
         {
             int x = Mathf.FloorToInt((lon + 180f) / 360f * Width)  % Width;
@@ -36,6 +40,7 @@ namespace FreightForwarder.Weather
             return _cells[y * Width + x];
         }
 
+// Devuelve la all cells
         public WeatherCell[] AllCells => _cells;
     }
 }

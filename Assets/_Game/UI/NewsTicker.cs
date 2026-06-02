@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using FreightForwarder.Managers;
 using FreightForwarder.Models;
+using FreightForwarder.Systems.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,13 +33,15 @@ namespace FreightForwarder.UI
         private float         _scrollAreaWidth;
 
         private static Font _fontCache;
+// Devuelve el font
         private static Font _font => _fontCache != null
             ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        // Se ejecuta durante Awake al iniciar el componente.
 
         private void Awake() => BuildUI();
 
+// Se ejecuta al iniciar el componente.
         private void Start()
         {
             if (EconomyManager.Instance != null)
@@ -59,8 +62,11 @@ namespace FreightForwarder.UI
                 EventManager.Instance.OnEventTriggered += OnEventTriggered;
             if (FFTimeManager.Instance != null)
                 FFTimeManager.Instance.OnDayPassed += OnDayPassed;
+            if (NewsManager.Instance != null)
+                NewsManager.Instance.OnNewsPublished += OnNewsPublished;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         private void OnDestroy()
         {
             if (EconomyManager.Instance != null)
@@ -81,9 +87,21 @@ namespace FreightForwarder.UI
                 EventManager.Instance.OnEventTriggered -= OnEventTriggered;
             if (FFTimeManager.Instance != null)
                 FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
+            if (NewsManager.Instance != null)
+                NewsManager.Instance.OnNewsPublished -= OnNewsPublished;
         }
 
-        // ── Scroll update ─────────────────────────────────────────────────────
+// Se invoca cuando noticias se publica.
+        private void OnNewsPublished(NewsItem item)
+        {
+            Color c = item.Category == NewsCategory.Fuel   ? new Color(1f, 0.72f, 0.32f) :
+                      item.Category == NewsCategory.Demand ? new Color(0.5f, 0.9f, 1f)   :
+                      item.Category == NewsCategory.Risk   ? new Color(1f, 0.55f, 0.4f)  :
+                                                             new Color(0.82f, 0.9f, 1f);
+            AddMessage(item.Headline, c);
+        }
+
+        // Ejecuta las comprobaciones necesarias en cada fotograma del juego.
 
         private void Update()
         {
@@ -96,7 +114,7 @@ namespace FreightForwarder.UI
                 StartNext();
         }
 
-        // ── UI construction ───────────────────────────────────────────────────
+        // Construye UI.
 
         private void BuildUI()
         {
@@ -151,7 +169,7 @@ namespace FreightForwarder.UI
             _scrollAreaWidth = Screen.width - LABEL_W - 2f;
         }
 
-        // ── Message queue ─────────────────────────────────────────────────────
+        // Añade message
 
         private void AddMessage(string text, Color color)
         {
@@ -159,6 +177,7 @@ namespace FreightForwarder.UI
             if (!_scrolling) StartNext();
         }
 
+// Inicio next.
         private void StartNext()
         {
             if (_queue.Count == 0) { _scrolling = false; return; }
@@ -185,26 +204,30 @@ namespace FreightForwarder.UI
                 _textRT.anchoredPosition = new Vector2(_x, 0f);
         }
 
-        // ── Callbacks ─────────────────────────────────────────────────────────
+        // Se invoca cuando el jugador sube de nivel.
 
         private void OnLevelUp(int level)
             => AddMessage($"⭐  ¡Subiste al Nivel {level}!  Bonus: +${level * 100:N0}  —  Seguís creciendo en el mercado global.",
                           new Color(1f, 0.9f, 0.1f));
 
+// Se invoca cuando cambia la reputación.
         private void OnRepChanged(int value)
         {
             if (value <= 20)
                 AddMessage($"⚠️  Reputación crítica: {value}/100  —  Tus clientes están perdiendo la confianza. Completá cargas con urgencia.",
                            new Color(1f, 0.35f, 0.2f));
+            // Realiza if
             else if (value <= 40)
                 AddMessage($"📉  Reputación en baja: {value}/100  —  Evitá más fallos para no perder contratos.",
                            new Color(1f, 0.6f, 0.2f));
         }
 
+// Se invoca cuando el juego termina.
         private void OnGameOver()
             => AddMessage("💀  GAME OVER  —  Tu empresa no pudo sostenerse. El mercado internacional sigue sin vos.",
                           new Color(1f, 0.15f, 0.15f));
 
+// Se invoca cuando un cargamento se completa.
         private void OnCargoCompleted(Cargo cargo)
         {
             int profit = cargo.FinalPrice - cargo.AgentCost;
@@ -212,6 +235,7 @@ namespace FreightForwarder.UI
                        new Color(0.2f, 0.95f, 0.45f));
         }
 
+// Se invoca cuando un cargamento falla.
         private void OnCargoFailed(Cargo cargo)
         {
             if (cargo.WasAbandonedByAgent)
@@ -222,10 +246,12 @@ namespace FreightForwarder.UI
                            new Color(1f, 0.4f, 0.2f));
         }
 
+// Se invoca cuando cargamento expira.
         private void OnCargoExpired(Cargo cargo)
             => AddMessage($"⏰  Oferta vencida sin cotizar: {Route(cargo)}  —  El cliente buscó otro operador.",
                           new Color(0.8f, 0.6f, 0.2f));
 
+// Se invoca cuando se agrega cargamento.
         private void OnCargoAdded(Cargo cargo)
         {
             string type  = Constants.GetCargoTypeName(cargo.CargoType);
@@ -233,24 +259,28 @@ namespace FreightForwarder.UI
                        new Color(0.6f, 0.8f, 1f));
         }
 
+// Se invoca cuando se activa un evento.
         private void OnEventTriggered(GameEvent evt, Cargo cargo)
             => AddMessage($"⚠️  Evento: {evt.Name}  en ruta {Route(cargo)}  —  {evt.Description}",
                           new Color(1f, 0.65f, 0.1f));
 
         private int _dayCounter;
+// Se invoca al terminar un día de juego.
         private void OnDayPassed()
         {
             _dayCounter++;
             if (_dayCounter % 7 == 0)
                 AddMessage($"📅  Semana {_dayCounter / 7} completada  —  Revisá el mercado: nuevas cargas disponibles.",
                            new Color(0.55f, 0.75f, 1f));
+            // Realiza if
             else if (_dayCounter == 30)
                 AddMessage("🗓️  Primer mes de operaciones completado  —  ¡Buen comienzo como freight forwarder!",
                            new Color(0.6f, 1f, 0.7f));
         }
 
+// Ruta.
         private static string Route(Cargo c)
-            => $"{c.OriginCityId.Replace('_', ' ')} → {c.DestinationCityId.Replace('_', ' ')}";
+            => $"{CityDatabase.DisplayNameOf(c.OriginCityId)} → {CityDatabase.DisplayNameOf(c.DestinationCityId)}";
 
         // ── UGUI factory helpers ──────────────────────────────────────────────
 
@@ -306,6 +336,7 @@ namespace FreightForwarder.UI
             return rt;
         }
 
+// Gestiona make imagen.
         private static Image MakeImage(RectTransform rt, Color color)
         {
             var img = rt.gameObject.AddComponent<Image>();

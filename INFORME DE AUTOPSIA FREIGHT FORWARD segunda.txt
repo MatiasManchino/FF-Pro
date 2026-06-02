@@ -1,0 +1,71 @@
+INFORME DE AUTOPSIA: FREIGHT FORWARDER PRO
+1. Resumen Ejecutivo
+Calificación General: 4.5 / 10 (Estado: "Paciente en coma inducido por UI procedimental").
+El proyecto tiene una base técnica interesante en cuanto a simulación astronómica, pero la arquitectura de software es un campo de batalla. La mezcla de sistemas legacy con "V2" desactivadas y una obsesión enfermiza por construir UI mediante código está desangrando la mantenibilidad.
+Los 3 Problemas Más Graves:
+Esquizofrenia de UI: Tres sistemas de HUD compitiendo por los mismos datos (FFUIManager, GameHUD, UIManager).
+Abuso de la "God Class": FFUIManager_Final.cs es un tumor de 800+ líneas que construye, gestiona y refresca toda la interfaz por código.
+Performance en Cuidados Intensivos: Re-cálculo de mallas (CargoRoute) y formateo de strings en Update cada frame.
+2. Problemas Críticos (Bugs y Bloqueos)
+Fuga de Materiales en Rutas: CargoRoute.cs crea new Material(Shader.Find(...)) en CreateVisuals. Aunque hay un OnDestroy, si el objeto se desactiva o se pierde la referencia sin destruir, tienes un leak de memoria de video asegurado.
+Carrera de Singletons: Singleton.cs usa FindAnyObjectByType y new GameObject en el getter. Si dos sistemas intentan acceder a un Manager en Awake, puedes terminar con instancias duplicadas o "Managers Fantasma" creados por accidente.
+Inconsistencia en SunController: El comentario del script admite un "BUG CRÍTICO" previo de doble cómputo de inclinación. Aunque dice estar arreglado, la lógica de RotateEarth y AimSun sigue siendo frágil ante cambios de TimeScale altos (x1000).
+3. Problemas Importantes (Arquitectura y Performance)
+Update() Carnicero:
+CargoRoute.cs: Recalcula 81 posiciones de LineRenderer y hace Slerp en cada frame para CADA ruta activa. Con 20 cargas, el CPU va a gritar.
+GameHUD.cs: Refresca barras de progreso y textos de dinero/reputación CADA frame, incluso si no han cambiado.
+Recursos Pesados en Loops: CloudRenderer.cs hace Resources.Load de 90+ texturas en un array. Si esto se llama en un reload de escena, prepárate para un "GC Spike" que congelará el juego.
+Dependencias Circulares: Los Managers se suscriben entre sí de forma caótica. WeatherImpact depende de CargoManager, que depende de EconomyManager, que es observado por FFUIManager. Un infierno de null references al cerrar la app.
+4. Código Muerto e Incompleto
+GameHUD.OnMoneyChanged(int v): Está suscrito al evento de economía pero el cuerpo de la función está VACÍO. Pura grasa innecesaria.
+FFUIManager_Final.cs: Los botones de "Configuración", "Guardar" y "Cargar" solo lanzan un Debug.Log("pendiente"). El juego no tiene persistencia real.
+FeatureFlags.cs: Un cementerio de promesas. Sistemas como AgentBonusSystem o ProgressionManager están marcados como "Fase 8/9" y su integración es parcial.
+5. Conflictos y Pisadas Detectadas
+Doble Identidad de Tiempo: Tienes TimeManager.cs (Map side) y FFTimeManager.cs (Game side). Ambos calculan el progreso del día de forma independiente. Si uno se desfasa, el sol no coincidirá con el calendario de entregas.
+Pisada de AmbientLight: GameBootstrapper setea un color de ambiente, pero SunController lo sobreescribe en su propio Awake.
+6. Problemas de Jerarquía y GameObjects
+Huérfanos procedimentales: CityMarker crea un LabelContainer como hijo, pero si el marker se destruye, la lógica de limpieza en OnDestroy es manual y propensa a errores.
+Spawn Caótico: CloudRenderer crea un pool de nubes pero las deja en la raíz de la escena o bajo un objeto sin organización, dificultando el debug en el Inspector.
+7. Recomendaciones de Refactorización
+Extirpar FFUIManager_Final: Mover la UI a Prefabs de Unity. Construir UI por código es una práctica de 2010 que destruye la colaboración con artistas y la performance.
+Implementar un TickSystem: No refresques la UI en Update. Usa eventos (OnMoneyChanged) o un pulso de 0.1s.
+Pooling Real: El pool de CloudRenderer es rudimentario. Usa el UnityEngine.Pool oficial para evitar recrear materiales.
+8. Evaluación de Scripts Individuales
+Script
+Nota
+Problema Principal
+FFUIManager_Final
+2/10
+God Class. 800 líneas de puro sufrimiento procedimental.
+CargoRoute
+4/10
+Ineficiencia matemática extrema en Update.
+SunController
+8/10
+Lógica astronómica sólida, pero acoplada a TimeManager.
+Singleton
+5/10
+Peligroso. Facilita la creación de objetos basura en runtime.
+CityMarker
+6/10
+Mezcla lógica de datos con visuales de labels.
+9. Código Mejorado (Ejemplo: GameHUD)
+ANTES (Basura en Update):
+C#
+void Update() {
+    RefreshDisplay(); // Se llama 60-120 veces por segundo sin necesidad
+}
+DESPUÉS (Surgical Refactor):
+C#
+// En Start()
+EconomyManager.Instance.OnMoneyChanged += UpdateMoneyUI;
+
+void UpdateMoneyUI(int newAmount) {
+    _moneyText.text = $"💰 ${newAmount:N0}";
+    // Solo se ejecuta cuando el dinero CAMBIA.
+}
+10. Checklist Final de Limpieza
+ Borrar FFGameBootstrapper.cs (es un stub muerto).
+ Unificar GameHUD y FFUIManager en un solo sistema de UI basado en Prefabs.
+ Mover los hardcodes de AgentManager y EventManager a ScriptableObjects.
+ Cambiar CargoRoute para que solo actualice visuales cuando el tiempo de juego avance, no cada frame de renderizado.

@@ -1,18 +1,23 @@
 using System;
 using System.Collections.Generic;
+using FreightForwarder.Map;
 using FreightForwarder.Models;
-using FreightForwarder.Utils;
-using FreightForwarder.Systems.Logistics;
+using FreightForwarder.Systems.Maritime;
 using FreightForwarder.Systems.Progression;
+using FreightForwarder.Utils;
 using UnityEngine;
 
 namespace FreightForwarder.Managers
 {
     public class CargoManager : Singleton<CargoManager>
     {
+// Mercado cargos.
         public List<Cargo> MarketCargos { get; private set; }
+// Gestiona active cargos.
         public List<Cargo> ActiveCargos { get; private set; }
+// Completado cargos.
         public List<Cargo> CompletedCargos { get; private set; }
+// Fallado cargos.
         public List<Cargo> FailedCargos { get; private set; }
 
         private int _maxMarketCargos = Constants.MAX_MARKET_CARGOS;
@@ -25,6 +30,7 @@ namespace FreightForwarder.Managers
         public event Action<Cargo> OnCargoFailed;
         public event Action<Cargo> OnCargoExpired;
 
+// Se ejecuta durante Awake al iniciar el componente.
         protected override void OnAwake()
         {
             MarketCargos = new List<Cargo>();
@@ -34,6 +40,7 @@ namespace FreightForwarder.Managers
             _unlockedCityIds = new List<string> { "buenos_aires" };
         }
 
+// Se ejecuta al iniciar el componente.
         private void Start()
         {
             CityDatabase.Initialize();
@@ -47,6 +54,7 @@ namespace FreightForwarder.Managers
             for (int i = 0; i < initial; i++) GenerateCargo();
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -54,20 +62,23 @@ namespace FreightForwarder.Managers
                 FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
         }
 
+// Refresca unlocked ciudades
         private void RefreshUnlockedCities()
         {
             _unlockedCityIds.Clear();
+// Foreach
             foreach (var city in CityDatabase.AllCities.Values)
                 if (city.IsUnlocked) _unlockedCityIds.Add(city.Id);
         }
 
         // ═══════════════════════════════════
         // CICLO DIARIO
-        // ═══════════════════════════════════
+        // Se invoca al terminar un día de juego.
 
         private void OnDayPassed()
         {
             int currentDay = FFTimeManager.Instance?.CurrentDay ?? 1;
+            PaymentManager.Instance?.ProcessDuePayments(currentDay);
             UpdateActiveCargos(currentDay);
             CheckExpiredCargos(currentDay);
 
@@ -75,25 +86,31 @@ namespace FreightForwarder.Managers
                 GenerateCargo();
         }
 
+// Actualiza active cargos
         private void UpdateActiveCargos(int currentDay)
         {
             var toComplete = new List<Cargo>();
+// Foreach
             foreach (var cargo in ActiveCargos)
             {
                 cargo.DaysRemaining--;
                 if (cargo.DaysRemaining <= 0)
                     toComplete.Add(cargo);
             }
+// Foreach
             foreach (var cargo in toComplete)
                 CompleteCargo(cargo, currentDay);
         }
 
+// Verifica expirado cargos.
         private void CheckExpiredCargos(int currentDay)
         {
             var toExpire = new List<Cargo>();
+// Foreach
             foreach (var cargo in MarketCargos)
                 if (cargo.IsExpired(currentDay)) toExpire.Add(cargo);
 
+// Foreach
             foreach (var cargo in toExpire)
             {
                 MarketCargos.Remove(cargo);
@@ -106,52 +123,99 @@ namespace FreightForwarder.Managers
         // GENERACIÓN DE CARGAS
         // ═══════════════════════════════════
 
+        // ── Port → cityId mapping ──────────────────────────────────────────
+        private static readonly Dictionary<string, string> _portToCityId = new Dictionary<string, string>
+        {
+            { "São Paulo",      "sao_paulo"    }, { "Buenos Aires", "buenos_aires" },
+            { "Valparaíso",     "valparaiso"   }, { "Santiago",     "santiago"     },
+            { "Lima",           "lima"         }, { "Panamá",       "panama"       },
+            { "Cartagena",      "cartagena"    }, { "Miami",        "miami"        },
+            { "New York",       "new_york"     }, { "Los Ángeles",  "los_angeles"  },
+            { "Houston",        "houston"      }, { "Vancouver",    "vancouver"    },
+            { "Tokio",          "tokio"        }, { "Busan",        "busan"        },
+            { "Vladivostok",    "vladivostok"  }, { "Shanghái",     "shanghai"     },
+            { "Taipéi",         "taipei"       }, { "Hong Kong",    "hong_kong"    },
+            { "Singapur",       "singapur"     }, { "Bangkok",      "bangkok"      },
+            { "Ho Chi Minh",    "ho_chi_minh"  }, { "Manila",       "manila"       },
+            { "Dubái",          "dubai"        }, { "Jeddah",       "jeddah"       },
+            { "Mumbai",         "mumbai"       }, { "Karachi",      "karachi"      },
+            { "Colombo",        "colombo"      }, { "Mombasa",      "mombasa"      },
+            { "Port Said",      "port_said"    }, { "Cape Town",    "cape_town"    },
+            { "Johannesburgo",  "johannesburg" }, { "Rotterdam",    "rotterdam"    },
+            { "London",         "london"       }, { "Amberes",      "amberes"      },
+            { "Barcelona",      "barcelona"    }, { "Marsella",     "marsella"     },
+            { "Hamburgo",       "hamburgo"     }, { "Casablanca",   "casablanca"   },
+            { "Atenas",         "atenas"       }, { "Estambul",     "estambul"     },
+            { "Sídney",         "sidney"       }, { "Auckland",     "auckland"     },
+        };
+
+// Puerto to ciudad id.
+        private static string PortToCityId(string port) =>
+            _portToCityId.TryGetValue(port, out var id) ? id : port.ToLowerInvariant().Replace(' ', '_');
+
+// Genera cargamento.
         private void GenerateCargo()
         {
             if (MarketCargos.Count >= _maxMarketCargos) return;
 
-            var allIds = new List<string>(CityDatabase.AllCities.Keys);
-            if (allIds.Count < 2) return;
+            // Pick a random ruta from the maritime database
+            var routes = MaritimeRouteDatabase.Routes;
+            if (routes == null || routes.Length == 0) return;
 
-            string originId = null, destinationId = null;
-            for (int attempt = 0; attempt < 10; attempt++)
-            {
-                string a = allIds[UnityEngine.Random.Range(0, allIds.Count)];
-                string b = allIds[UnityEngine.Random.Range(0, allIds.Count)];
-                if (a != b) { originId = a; destinationId = b; break; }
-            }
-            if (originId == null) return;
+            var entry = routes[UnityEngine.Random.Range(0, routes.Length)];
+            string[] parts = SplitPortNames(entry.Item1);
+            if (parts == null) return;
 
-            Constants.CargoType cargoType = RollCargoType();
+            string originPort = MaritimeSimulationManager.Canonical(parts[0]);
+            string destPort   = MaritimeSimulationManager.Canonical(parts[1]);
+            string originId   = PortToCityId(originPort);
+            string destId     = PortToCityId(destPort);
+
+            Constants.CargoType  cargoType  = RollCargoType();
             Constants.ClientType clientType = ClientManager.Instance?.GetRandomClientType()
                                               ?? Constants.ClientType.GoodPayer;
-
-            Client client = ClientManager.Instance?.GetOrCreateClient(clientType);
+            Client client    = ClientManager.Instance?.GetOrCreateClient(clientType);
             string clientName = client?.CompanyName ?? "Empresa Anónima";
 
-            float weight = UnityEngine.Random.Range(1f, 500f);
-            float volume = UnityEngine.Random.Range(1f, 200f);
-            float distance = CityDatabase.GetDistance(originId, destinationId);
-            float baseValue = 1000f + (distance / 20000f) * 500000f;
-            float typeMultiplier = Constants.CargoValueMultipliers[cargoType];
-            int declaredValue = (int)(baseValue * typeMultiplier * UnityEngine.Random.Range(0.8f, 1.2f));
-            declaredValue = Mathf.Clamp(declaredValue, 1000, 500000);
+            float weight       = UnityEngine.Random.Range(5f, 500f);
+            float volume       = UnityEngine.Random.Range(5f, 200f);
+            float ttBaseDays   = entry.Item2;
+            float baseValue    = 2000f + ttBaseDays * 800f;
+            int declaredValue  = Mathf.Clamp(
+                (int)(baseValue * Constants.CargoValueMultipliers[cargoType] * UnityEngine.Random.Range(0.8f, 1.2f)),
+                1000, 500000);
 
-            int currentDay = FFTimeManager.Instance?.CurrentDay ?? 1;
+            int currentDay    = FFTimeManager.Instance?.CurrentDay ?? 1;
             int expirationDay = currentDay + Constants.CARGO_EXPIRATION_DAYS;
 
-            var cargo = new Cargo(originId, destinationId, cargoType, clientType,
+            var cargo = new Cargo(originId, destId, cargoType, clientType,
                                   clientName, weight, volume, declaredValue,
-                                  expirationDay, currentDay);
+                                  expirationDay, currentDay)
+            {
+                PreferredTransport = Constants.TransportMode.Maritime,
+                TransportReason    = "Ruta marítima disponible.",
+            };
             if (client != null) cargo.ClientId = client.Id;
 
-            cargo.PreferredTransport = DeterminePreferredTransport(cargoType, distance, originId, destinationId);
-            cargo.TransportReason = GetTransportReason(cargo.PreferredTransport, cargoType, distance);
+            // Store puerto names para que the mercado puede look up ruta options
+            cargo.RouteWaypoints.Add(originPort);
+            cargo.RouteWaypoints.Add(destPort);
 
             MarketCargos.Add(cargo);
             OnCargoAddedToMarket?.Invoke(cargo);
         }
 
+// Gestiona split puerto names.
+        private static string[] SplitPortNames(string routeName)
+        {
+            int idx = routeName.IndexOf(" – ");
+            if (idx < 0) idx = routeName.IndexOf(" - ");
+            if (idx < 0) return null;
+            string sep = routeName.IndexOf(" – ") >= 0 ? " – " : " - ";
+            return new[] { routeName.Substring(0, idx).Trim(), routeName.Substring(idx + sep.Length).Trim() };
+        }
+
+// Ejecuta roll cargo type
         private Constants.CargoType RollCargoType()
         {
             float roll = UnityEngine.Random.value;
@@ -162,121 +226,97 @@ namespace FreightForwarder.Managers
             return Constants.CargoType.Dangerous;
         }
 
-        private Constants.TransportMode DeterminePreferredTransport(Constants.CargoType type, float distance,
-                                                                      string originId, string destId)
-        {
-            WorldCity origin = CityDatabase.GetCity(originId);
-            WorldCity dest   = CityDatabase.GetCity(destId);
-
-            if (type == Constants.CargoType.Urgent || type == Constants.CargoType.Valuable)
-            {
-                if (origin != null && dest != null && origin.HasAirport && dest.HasAirport)
-                    return Constants.TransportMode.Air;
-            }
-            if (type == Constants.CargoType.Dangerous)
-            {
-                if (origin != null && dest != null && origin.HasPort && dest.HasPort)
-                    return Constants.TransportMode.Maritime;
-            }
-            if (distance < 3000f && origin != null && dest != null && origin.CanLandTransportTo(dest))
-                return Constants.TransportMode.Land;
-            if (origin != null && dest != null && origin.HasPort && dest.HasPort)
-                return Constants.TransportMode.Maritime;
-            return Constants.TransportMode.Maritime;
-        }
-
-        private string GetTransportReason(Constants.TransportMode mode, Constants.CargoType type, float distance)
-        {
-            switch (mode)
-            {
-                case Constants.TransportMode.Air:
-                    return type == Constants.CargoType.Urgent ? "Urgente: requiere entrega rápida." : "Carga valiosa: mayor seguridad en vuelo.";
-                case Constants.TransportMode.Maritime:
-                    return type == Constants.CargoType.Dangerous ? "Peligrosa: el marítimo tiene menos restricciones." :
-                           distance > 5000f ? "Larga distancia: marítimo más económico." : "Puerto disponible en ambas ciudades.";
-                case Constants.TransportMode.Land:
-                    return "Distancia corta: transporte terrestre más eficiente.";
-                default:
-                    return "Modo óptimo según las condiciones de la ruta.";
-            }
-        }
 
         // ═══════════════════════════════════
         // ACEPTAR COTIZACIÓN
-        // ═══════════════════════════════════
+        // Aceptado cotización.
 
         public bool AcceptQuote(Cargo cargo, Quote quote, int currentDay)
         {
             if (!MarketCargos.Contains(cargo)) return false;
-
             MarketCargos.Remove(cargo);
 
-            cargo.Status = Constants.CargoStatus.Active;
-            cargo.QuotedPrice = quote.OfferedPrice;
-            cargo.FinalPrice = quote.IsAgreementReached ? quote.FinalPrice : quote.OfferedPrice;
-            cargo.AgentCost = quote.AgentCost;
-            cargo.Margin = quote.Margin;
-            cargo.TransportMode = quote.TransportMode;
-            cargo.AgentId = quote.AgentId;
-            cargo.HasInsurance = quote.HasInsurance;
-            cargo.StartDay = currentDay;
+            cargo.Status          = Constants.CargoStatus.Active;
+            cargo.QuotedPrice     = quote.OfferedPrice;
+            cargo.FinalPrice      = quote.IsAgreementReached ? quote.FinalPrice : quote.OfferedPrice;
+            cargo.AgentCost       = quote.AgentCost;
+            cargo.Margin          = quote.Margin;
+            cargo.TransportMode   = quote.TransportMode;
+            cargo.AgentId         = quote.AgentId;
+            cargo.HasInsurance    = quote.HasInsurance;
+            cargo.StartDay        = currentDay;
 
             float distance = CityDatabase.GetDistance(cargo.OriginCityId, cargo.DestinationCityId);
-            Agent agent = AgentManager.Instance?.GetAgent(quote.AgentId);
-            float speed = agent?.GetCurrentSpeedMultiplier() ?? 1f;
-
-            int baseDays = CalculateTransitDaysV2(cargo.OriginCityId, cargo.DestinationCityId,
-                                                   quote.TransportMode, speed);
-            cargo.TotalTransitDays = baseDays;
-            cargo.DaysRemaining = baseDays;
-            cargo.EstimatedArrivalDay = currentDay + baseDays;
+            Agent agent    = AgentManager.Instance?.GetAgent(quote.AgentId);
+            float speed    = agent?.GetCurrentSpeedMultiplier() ?? 1f;
+            int baseDays   = CalculateTransitDaysV2(cargo.OriginCityId, cargo.DestinationCityId,
+                                                     quote.TransportMode, speed);
+            // + días de operación detenido en la terminal de origen y destino (carga/descarga).
+            int totalDays = baseDays + 2 * Constants.TERMINAL_OPERATION_DAYS;
+            cargo.TotalTransitDays   = totalDays;
+            cargo.DaysRemaining      = totalDays;
+            cargo.EstimatedArrivalDay = currentDay + totalDays;
 
             AgentManager.Instance?.AssignCargoToAgent(quote.AgentId, cargo.Id);
+            ClientManager.Instance?.NotifyInteraction(cargo.ClientId, currentDay);
             ActiveCargos.Add(cargo);
             OnCargoAccepted?.Invoke(cargo);
             return true;
         }
 
-        private int CalculateTransitDays(Constants.TransportMode mode, float distanceKm, float speedMult)
+        // Maritime ruta acceptance — called by MarketPanel when jugador picks a ShipmentOption
+        public bool AcceptMaritimeOption(Cargo cargo, ShipmentOption option, int finalPrice, int currentDay)
         {
-            // V2: usa RouteGraph si está activo
-            if (FeatureFlags.USE_ROUTE_GRAPH && RouteGraph.Instance.IsBuilt)
-            {
-                // speedMult ya viene del agente; el RouteGraph lo aplica internamente
-                return RouteGraph.Instance
-                    .FindRoute("", "", mode, speedMult)
-                    .TotalDays; // fallback con distancia directa
-            }
+            if (!MarketCargos.Contains(cargo)) return false;
+            MarketCargos.Remove(cargo);
 
-            // V1 legacy: Haversine directo
+            cargo.Status             = Constants.CargoStatus.Active;
+            cargo.FinalPrice         = finalPrice;
+            cargo.QuotedPrice        = finalPrice;
+            cargo.AgentCost          = option.EstimatedCostUSD;
+            cargo.Margin             = finalPrice > 0 ? (float)(finalPrice - option.EstimatedCostUSD) / finalPrice : 0f;
+            cargo.TransportMode      = Constants.TransportMode.Maritime;
+            cargo.StartDay           = currentDay;
+            cargo.TotalTransitDays   = option.TotalTTDays;
+            cargo.DaysRemaining      = option.TotalTTDays;
+            cargo.EstimatedArrivalDay = currentDay + option.TotalTTDays;
+
+            // Start visual simulation
+            MaritimeSimulationManager.Instance?.StartShipment(cargo.Id, option, currentDay);
+            ShipMarker.Create(MaritimeSimulationManager.Instance?.GetShipment(cargo.Id));
+
+            ClientManager.Instance?.NotifyInteraction(cargo.ClientId, currentDay);
+            ActiveCargos.Add(cargo);
+            OnCargoAccepted?.Invoke(cargo);
+            return true;
+        }
+
+// Completo maritime shipment.
+        public void CompleteMaritimeShipment(string cargoId, int currentDay)
+        {
+            var cargo = GetCargoById(cargoId);
+            if (cargo != null && cargo.IsActive())
+                CompleteCargo(cargo, currentDay);
+        }
+
+        private int CalculateTransitDaysV2(string originId, string destId,
+                                            Constants.TransportMode mode, float speedMult)
+        {
             float kmPerDay;
             switch (mode)
             {
                 case Constants.TransportMode.Air:        kmPerDay = 15000f; break;
                 case Constants.TransportMode.Land:       kmPerDay = 600f;   break;
                 case Constants.TransportMode.Rail:       kmPerDay = 800f;   break;
-                case Constants.TransportMode.Multimodal: kmPerDay = 3000f;  break;
                 default:                                 kmPerDay = 2000f;  break;
             }
-            int days = Mathf.CeilToInt(distanceKm / (kmPerDay * speedMult));
-            return Mathf.Max(1, days);
-        }
-
-        private int CalculateTransitDaysV2(string originId, string destId,
-                                            Constants.TransportMode mode, float speedMult)
-        {
-            if (!FeatureFlags.USE_ROUTE_GRAPH || !RouteGraph.Instance.IsBuilt)
-                return CalculateTransitDays(mode,
-                    CityDatabase.GetDistance(originId, destId), speedMult);
-
-            float worldFuel = FreightForwarder.Systems.World.WorldStateManager.Instance?.FuelMultiplier ?? 1f;
-            var result = RouteGraph.Instance.FindRoute(originId, destId, mode, speedMult, worldFuel);
-            return result.TotalDays;
+            float dist = CityDatabase.GetDistance(originId, destId);
+            return Mathf.Max(1, Mathf.CeilToInt(dist / (kmPerDay * speedMult)));
         }
 
         // ═══════════════════════════════════
         // COMPLETAR / FALLAR
-        // ═══════════════════════════════════
+        // Completo cargamento.
 
         private void CompleteCargo(Cargo cargo, int currentDay)
         {
@@ -287,10 +327,30 @@ namespace FreightForwarder.Managers
             if (CompletedCargos.Count >= 100) CompletedCargos.RemoveAt(0);
             CompletedCargos.Add(cargo);
 
-            EconomyManager.Instance?.RecordCargoCompleted(cargo.FinalPrice, cargo.AgentCost);
+            // Período de gracia: las primeras operaciones NO descuentan el costo del transportista.
+            // Luego se paga al contado al entregar (riesgo de caja / bancarrota) y se difiere el cobro bruto.
+            var eco = EconomyManager.Instance;
+            int completedSoFar = eco?.TotalCargosCompleted ?? 0;
+            bool grace = completedSoFar < Constants.PAYMENT_GRACE_OPERATIONS;
+
+            eco?.RecordCargoCompletedDeferred();   // estadística + XP (incrementa el contador)
+
+            int deferredAmount;
+            if (grace)
+            {
+                deferredAmount = Math.Max(0, cargo.FinalPrice - cargo.AgentCost); // neto diferido, sin gasto
+            }
+            else
+            {
+                eco?.PayCarrierCost(cargo.AgentCost);  // costo del transportista al contado (puede fundir)
+                deferredAmount = cargo.FinalPrice;     // cobro bruto del cliente, diferido
+            }
+            PaymentManager.Instance?.SchedulePayment(cargo, currentDay, deferredAmount);
+
             AgentManager.Instance?.RecordDelivery(cargo.AgentId, cargo.Id, true, false);
+            int clientProfit = Math.Max(0, cargo.FinalPrice - cargo.AgentCost);
             ClientManager.Instance?.NotifyDelivery(cargo.ClientId, true,
-                cargo.OriginCityId, cargo.DestinationCityId, currentDay);
+                cargo.OriginCityId, cargo.DestinationCityId, currentDay, false, false, clientProfit);
 
             if (FeatureFlags.USE_AGENT_BONUS)
                 AgentBonusSystem.RecordRoute(cargo.AgentId, cargo.OriginCityId, cargo.DestinationCityId);
@@ -298,6 +358,7 @@ namespace FreightForwarder.Managers
             OnCargoCompleted?.Invoke(cargo);
         }
 
+// Gestiona fail cargamento.
         private void FailCargo(Cargo cargo, int currentDay, string reason)
         {
             ActiveCargos.Remove(cargo);
@@ -315,6 +376,7 @@ namespace FreightForwarder.Managers
             Debug.LogWarning($"[CargoManager] Carga fallida: {cargo.Id} — {reason}");
         }
 
+// Gestiona abandon cargamento.
         public void AbandonCargo(Cargo cargo, int currentDay)
         {
             ActiveCargos.Remove(cargo);
@@ -333,7 +395,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // CONSULTAS
-        // ═══════════════════════════════════
+        // Obtiene cargamento by id
 
         public Cargo GetCargoById(string id)
         {
@@ -344,22 +406,27 @@ namespace FreightForwarder.Managers
             return null;
         }
 
+// Obtiene available cargos
         public List<Cargo> GetAvailableCargos()
         {
             var result = new List<Cargo>();
+// Foreach
             foreach (var c in MarketCargos)
                 if (c.Status == Constants.CargoStatus.Available) result.Add(c);
             return result;
         }
 
+// Obtiene total cargos
         public int GetTotalCargos() => MarketCargos.Count + ActiveCargos.Count + CompletedCargos.Count + FailedCargos.Count;
 
+// Obtiene success rate
         public float GetSuccessRate()
         {
             int done = CompletedCargos.Count + FailedCargos.Count;
             return done == 0 ? 0f : (float)CompletedCargos.Count / done;
         }
 
+// Gestiona unlock ciudad.
         public void UnlockCity(string cityId)
         {
             WorldCity city = CityDatabase.GetCity(cityId);

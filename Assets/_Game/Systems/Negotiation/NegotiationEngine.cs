@@ -5,11 +5,11 @@ using UnityEngine;
 
 namespace FreightForwarder.Systems.Negotiation
 {
-    /// <summary>
-    /// Motor de negociación V2. Reemplaza la lógica inline de ClientManager.EvaluateQuote.
-    /// Activar con FeatureFlags.USE_NEGOTIATION_V2 = true.
-    /// No modifica Client.cs ni ClientManager.cs.
-    /// </summary>
+
+    // Motor de negociación V2. Reemplaza la lógica inline de ClientManager.EvaluateQuote.
+    // Activar con FeatureFlags.USE_NEGOTIATION_V2 = true.
+    // No modifica Client.cs ni ClientManager.cs.
+
     public static class NegotiationEngine
     {
         public static NegotiationOutcome Evaluate(Quote quote, Client client, Cargo cargo,
@@ -76,7 +76,7 @@ namespace FreightForwarder.Systems.Negotiation
             return Mathf.Clamp01(base_);
         }
 
-        // ── Mensajes ─────────────────────────────────────────────────────────
+        // Construye counter oferta message.
 
         private static string BuildCounterOfferMessage(Client client, int price, int round)
         {
@@ -88,6 +88,7 @@ namespace FreightForwarder.Systems.Negotiation
             return phrases[Mathf.Min(round, phrases.Length - 1)];
         }
 
+// Construye rejection message.
         private static string BuildRejectionMessage(Client client, Quote quote)
         {
             if (quote.HasExcessiveMargin())
@@ -111,13 +112,19 @@ namespace FreightForwarder.Systems.Negotiation
 
     public class NegotiationOutcome
     {
+// Gestiona kind.
         public enum Kind { Accepted, CounterOffer, Rejected }
 
+// Gestiona resultado.
         public Kind   Result         { get; }
+// Gestiona acceptance prob.
         public float  AcceptanceProb { get; }
+// Mensaje.
         public string Message        { get; }
+// Gestiona counter precio.
         public int    CounterPrice   { get; }
 
+// Realiza negotiation outcome
         private NegotiationOutcome(Kind kind, float prob, string msg, int counter = 0)
         {
             Result         = kind;
@@ -126,12 +133,15 @@ namespace FreightForwarder.Systems.Negotiation
             CounterPrice   = counter;
         }
 
+// Aceptado.
         public static NegotiationOutcome Accept(float prob, string msg)
             => new NegotiationOutcome(Kind.Accepted, prob, msg);
 
+// Gestiona counter.
         public static NegotiationOutcome Counter(int price, string msg, float prob)
             => new NegotiationOutcome(Kind.CounterOffer, prob, msg, price);
 
+// Gestiona reject.
         public static NegotiationOutcome Reject(string msg, float prob)
             => new NegotiationOutcome(Kind.Rejected, prob, msg);
     }

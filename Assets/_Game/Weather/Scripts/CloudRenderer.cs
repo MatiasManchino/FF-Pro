@@ -5,15 +5,15 @@ using UnityEngine;
 
 namespace FreightForwarder.Weather
 {
-    /// <summary>
-    /// Gestiona todos los sprites de nubes reales sobre el globo.
-    /// - Carga las texturas PNG desde Resources
-    /// - Divide el mundo en 16×8 regiones de render
-    /// - Spawna nubes individuales (alpha 0.2–0.7) y clusters para tormentas
-    /// - Delega el huracán a HurricaneController
-    /// Mantiene la misma interfaz que antes (Initialize + Refresh) para que
-    /// WeatherSystem no necesite cambios.
-    /// </summary>
+
+    // Gestiona todos los sprites de nubes reales sobre el globo.
+    // - Carga las texturas PNG desde Resources
+    // - Divide el mundo en 16×8 regiones de render
+    // - Spawna nubes individuales (alpha 0.2–0.7) y clusters para tormentas
+    // - Delega el huracán a HurricaneController
+    // Mantiene la misma interfaz que antes (Inicializa + Refresh) para que
+    // WeatherSystem no necesite cambios.
+
     public class CloudRenderer : Singleton<CloudRenderer>
     {
         // ── Config ────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ namespace FreightForwarder.Weather
         // Pool de sprites pre-instanciados — se activan/desactivan en lugar de crear/destruir
         private CloudSpriteInstance[] _pool;
 
-        // ── Init ──────────────────────────────────────────────────────────────
+        // Inicializa ialize.
 
         public void Initialize(WeatherGrid grid, WeatherConfig config)
         {
@@ -79,6 +79,7 @@ namespace FreightForwarder.Weather
             }
         }
 
+// Gestiona resolve sombreado.
         private void ResolveShader()
         {
             _cloudShader = Shader.Find("FF/CloudSprite");
@@ -102,6 +103,7 @@ namespace FreightForwarder.Weather
             Debug.LogError("[CloudRenderer] No se encontró ningún shader válido. Las nubes no se renderizarán.");
         }
 
+// Carga texturas
         private void LoadTextures()
         {
             // Carga todas las PNGs numeradas de la carpeta Cloud
@@ -115,6 +117,7 @@ namespace FreightForwarder.Weather
                 "84","85","86","87","88","89","90","91","92","96","97","98","100"
             };
 
+// Foreach
             foreach (var n in names)
             {
                 var tex = Resources.Load<Texture2D>($"Map/Textures/Cloud/{n}");
@@ -135,6 +138,7 @@ namespace FreightForwarder.Weather
 
         private float _spawnTimer;
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
         private void Update()
         {
             _spawnTimer += Time.deltaTime;
@@ -162,9 +166,10 @@ namespace FreightForwarder.Weather
 
         private int _refreshCount;
 
+// Refresca
         public void Refresh(WeatherGrid grid)
         {
-            // Auto-inicializar si esta instancia nunca recibió Initialize() (nuevo Singleton creado en runtime)
+            // Auto-inicializar si esta instancia nunca recibió Inicializa() (nuevo Singleton creado en runtime)
             if (_cloudTextures == null || _cloudTextures.Length == 0 || _cloudShader == null)
             {
                 Debug.LogWarning("[CloudRenderer] Refresh: instancia sin inicializar, recargando recursos...");
@@ -186,6 +191,7 @@ namespace FreightForwarder.Weather
 
             // Recalcular conteo por región
             System.Array.Clear(_regionSpriteCount, 0, _regionSpriteCount.Length);
+// Foreach
             foreach (var s in _sprites)
             {
                 if (s == null) continue;
@@ -207,6 +213,7 @@ namespace FreightForwarder.Weather
             float cycloneStr   = 0f;
             int   regionsAbove = 0;
 
+// Foreach
             foreach (int ri in _regionOrder)
             {
                 int rx = ri % REGION_W;
@@ -234,8 +241,10 @@ namespace FreightForwarder.Weather
                 int desired;
                 if (avgCyclone > 0.4f)
                     desired = Random.Range(5, 9);    // ciclón = cluster denso de tormentas
+                // Realiza if
                 else if (avgStorm > STORM_THRESHOLD)
                     desired = Random.Range(6, 10);
+                // Realiza if
                 else if (avgCloud > CLOUD_THRESHOLD)
                     desired = Random.Range(3, 5);
                 else
@@ -330,10 +339,12 @@ namespace FreightForwarder.Weather
             if (ri >= 0) _regionSpriteCount[ri]++;
         }
 
+// Gestiona despawn one in.
         private void DespawnOneIn(float centerLat, float centerLon)
         {
             float bestDist = float.MaxValue;
             CloudSpriteInstance best = null;
+// Foreach
             foreach (var s in _sprites)
             {
                 if (s == null || s.Despawning) continue;
@@ -372,6 +383,7 @@ namespace FreightForwarder.Weather
             if (count > 0) { cloud /= count; storm /= count; cyclone /= count; }
         }
 
+// Latitud longitud to región.
         private int LatLonToRegion(float lat, float lon)
         {
             int rx = Mathf.FloorToInt((lon + 180f) / 360f * REGION_W);
@@ -387,7 +399,7 @@ namespace FreightForwarder.Weather
         {
             if (_sharedCloudMesh != null) return _sharedCloudMesh;
 
-            // Grid NxN: suficientes vértices para que el shader curve la malla
+            // Rejilla NxN: suficientes vértices para que el sombreado curve la malla
             // sobre la esfera sin artifacts visuales en nubes de hasta 380 unidades.
             const int N = 10;
             int vCount = (N + 1) * (N + 1);
@@ -423,7 +435,7 @@ namespace FreightForwarder.Weather
             return _sharedCloudMesh;
         }
 
-        // ── Object Pool ──────────────────────────────────────────────────────
+        // Construye pool.
 
         private void BuildPool()
         {
@@ -441,6 +453,7 @@ namespace FreightForwarder.Weather
             }
         }
 
+// Gestiona acquire.
         private CloudSpriteInstance Acquire(bool isStorm)
         {
             for (int i = 0; i < _pool.Length; i++)
@@ -455,19 +468,21 @@ namespace FreightForwarder.Weather
             return null;
         }
 
+// Libera.
         public void Release(CloudSpriteInstance sprite)
         {
             _sprites.Remove(sprite);
             sprite.gameObject.SetActive(false);
         }
 
-        // ── Cleanup ───────────────────────────────────────────────────────────
+        // Elimina el marcador del registro y destruye su label al destruir el objeto.
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
             _sprites.Clear();
             if (_pool == null) return;
+// Foreach
             foreach (var s in _pool)
                 if (s != null) Destroy(s.gameObject);
             _pool = null;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FreightForwarder.Managers;
 using FreightForwarder.Models;
+using FreightForwarder.Systems.Maritime;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,7 +10,7 @@ namespace FreightForwarder.UI
 {
     public class MarketPanel : MonoBehaviour
     {
-        // ── State ─────────────────────────────────────────────────────────────
+        // Estado.
         private enum State { Market, Quoting, Result }
         private State _state = State.Market;
 
@@ -27,7 +28,14 @@ namespace FreightForwarder.UI
         private List<Agent>               _availableAgents = new List<Agent>();
         private Text                      _agentCostLabel;
 
-        // ── Result state ──────────────────────────────────────────────────────
+        // ── Maritime ruta selection estado ────────────────────────────────────
+        private bool                   _isMaritime;
+        private List<ShipmentOption>   _maritimeOptions = new List<ShipmentOption>();
+        private int                    _selectedOptionIdx;
+        private RectTransform          _routeOptsContent;
+        private Image[]                _routeOptBtnBgs;
+
+        // ── Resultado estado ──────────────────────────────────────────────────────
         private string _resultMsg = "";
         private bool   _resultOk;
         private Quote  _lastQuote;
@@ -46,6 +54,7 @@ namespace FreightForwarder.UI
         private static readonly Color C_GREY   = new Color(0.75f, 0.75f, 0.75f, 1.00f);
 
         private static Font _fontCache;
+// Font
         private static Font _font => _fontCache != null ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
 
         // ── UGUI refs — root ──────────────────────────────────────────────────
@@ -62,6 +71,8 @@ namespace FreightForwarder.UI
         private Text           _quotingDistText;
         private RectTransform  _modeButtonsRT;
         private RectTransform  _agentContent;
+        private GameObject     _agentSectionLabelGO;
+        private GameObject     _agentScrollHostGO;
         private InputField     _priceInputField;
         private Text           _marginText;
         private Text           _clientTipText;
@@ -70,14 +81,14 @@ namespace FreightForwarder.UI
         private Text           _submitHintText;
         private Image[]        _modeBtnBgs;
 
-        // ── Result panel refs ─────────────────────────────────────────────────
+        // ── Resultado panel refs ─────────────────────────────────────────────────
         private GameObject _resultGO;
         private Text       _resultMsgText;
         private GameObject _counterOfferGO;
         private Text       _counterAcceptLbl;
         private Text       _backBtnLbl;
 
-        // ── API ───────────────────────────────────────────────────────────────
+        // Establece visible.
         public void SetVisible(bool v)
         {
             _visible = v;
@@ -85,33 +96,37 @@ namespace FreightForwarder.UI
             if (!v) { _state = State.Market; ShowState(); }
             else ShowMarket();
         }
+// Indica si visible
         public bool IsVisible => _visible;
 
-        // ── Lifecycle ─────────────────────────────────────────────────────────
+        // Se ejecuta durante Awake al iniciar el componente.
 
         private void Awake()
         {
             BuildUI();
         }
 
+// Se ejecuta al iniciar el componente.
         private void Start()
         {
             if (FFTimeManager.Instance != null)
                 FFTimeManager.Instance.OnDayPassed += OnDayPassed;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         private void OnDestroy()
         {
             if (FFTimeManager.Instance != null)
                 FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
         }
 
+// Se invoca al terminar un día de juego.
         private void OnDayPassed()
         {
             if (_visible && _state == State.Market) PopulateMarket();
         }
 
-        // ── Build UI ──────────────────────────────────────────────────────────
+        // Construye UI.
 
         private void BuildUI()
         {
@@ -130,6 +145,7 @@ namespace FreightForwarder.UI
             BuildResultPanel();
         }
 
+// Construye mercado panel.
         private void BuildMarketPanel()
         {
             var go = new GameObject("MarketState");
@@ -171,6 +187,7 @@ namespace FreightForwarder.UI
             sr.movementType = ScrollRect.MovementType.Clamped;
         }
 
+// Construye quoting panel.
         private void BuildQuotingPanel()
         {
             var go = new GameObject("QuoteState");
@@ -183,7 +200,7 @@ namespace FreightForwarder.UI
 
             float y = -6f;
 
-            // Back + title
+            // Regreso + title
             MakeBtn("BackBtn", rt, new Vector2(8,y), new Vector2(72,22), "← Volver",
                 () => ShowMarket()); y -= 28f;
             MakeTxtPos("QTitle", rt, new Vector2(84,-6), new Vector2(PW-92, 22),
@@ -197,16 +214,17 @@ namespace FreightForwarder.UI
                 "", 11, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
             y -= 22f;
 
-            // Mode buttons
+            // Mode botones
             MakeSectionLabel("MODO DE TRANSPORTE", rt, ref y);
             _modeButtonsRT = MakeRect("ModeBtns", rt, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
                 new Vector2(8,y), new Vector2(PW-16, 26));
             y -= 32f;
 
             // Agent scroll
-            MakeSectionLabel("AGENTE", rt, ref y);
+            _agentSectionLabelGO = MakeSectionLabel("AGENTE", rt, ref y);
             float agentH = 120f;
             var agentScrollHost = new GameObject("AgentScrollHost").AddComponent<RectTransform>();
+            _agentScrollHostGO = agentScrollHost.gameObject;
             agentScrollHost.SetParent(rt, false);
             agentScrollHost.anchorMin = new Vector2(0,1); agentScrollHost.anchorMax = new Vector2(0,1);
             agentScrollHost.pivot = new Vector2(0,1);
@@ -261,6 +279,7 @@ namespace FreightForwarder.UI
                 "", 10, FontStyle.Italic, new Color(0.7f,0.5f,0.3f), TextAnchor.UpperLeft);
         }
 
+// Construye resultado panel.
         private void BuildResultPanel()
         {
             var go = new GameObject("ResultState");
@@ -281,7 +300,7 @@ namespace FreightForwarder.UI
             _resultMsgText.horizontalOverflow = HorizontalWrapMode.Wrap;
             y -= 74f;
 
-            // Counter-offer buttons (shown/hidden)
+            // Counter-oferta botones (shown/hidden)
             var coGO = new GameObject("CounterOfferBtns");
             var coRT = coGO.AddComponent<RectTransform>();
             coRT.SetParent(rt, false);
@@ -305,7 +324,7 @@ namespace FreightForwarder.UI
             _backBtnLbl = backBtn.GetComponentInChildren<Text>();
         }
 
-        // ── State machine ─────────────────────────────────────────────────────
+        // Muestra estado
 
         private void ShowState()
         {
@@ -314,6 +333,7 @@ namespace FreightForwarder.UI
             if (_resultGO  != null) _resultGO.SetActive(_state == State.Result);
         }
 
+// Muestra market
         private void ShowMarket()
         {
             _state = State.Market;
@@ -321,6 +341,7 @@ namespace FreightForwarder.UI
             PopulateMarket();
         }
 
+// Muestra quoting
         private void ShowQuoting()
         {
             _state = State.Quoting;
@@ -330,6 +351,7 @@ namespace FreightForwarder.UI
             RefreshQuoteForm();
         }
 
+// Muestra resultado
         private void ShowResult()
         {
             _state = State.Result;
@@ -349,7 +371,7 @@ namespace FreightForwarder.UI
                 _backBtnLbl.text = _resultOk ? "← Al Mercado" : "← Intentar de nuevo";
         }
 
-        // ── Market population ─────────────────────────────────────────────────
+        // Llena mercado.
 
         private void PopulateMarket()
         {
@@ -374,7 +396,7 @@ namespace FreightForwarder.UI
                 Color daysCol = daysLeft <= 2 ? new Color(1f,0.4f,0.2f) : C_GREY;
 
                 MakeTxtPos("Info", card, new Vector2(6,-4), new Vector2(tw,18),
-                    $"{CargoIcon(c.CargoType)} {c.OriginCityId.Replace('_',' ')} → {c.DestinationCityId.Replace('_',' ')}",
+                    $"{CargoIcon(c.CargoType)} {CityDatabase.DisplayNameOf(c.OriginCityId)} → {CityDatabase.DisplayNameOf(c.DestinationCityId)}",
                     12, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
                 MakeTxtPos("Type", card, new Vector2(6,-24), new Vector2(tw,16),
                     $"{Constants.GetCargoTypeName(c.CargoType)}  |  {c.Weight:F0}t  |  ${c.DeclaredValue:N0}",
@@ -397,7 +419,7 @@ namespace FreightForwarder.UI
             }
         }
 
-        // ── Quote form ────────────────────────────────────────────────────────
+        // Abre cotización.
 
         private void OpenQuote(Cargo cargo)
         {
@@ -405,13 +427,38 @@ namespace FreightForwarder.UI
             _mode           = cargo.PreferredTransport;
             _agentId        = "";
             _priceInput     = "";
-            _currentDist    = CityDatabase.GetDistance(cargo.OriginCityId, cargo.DestinationCityId);
             _availableModes = GetAvailableModes();
             if (_priceInputField != null) _priceInputField.text = "";
-            RefreshAgents();
+
+            // Detect maritime cargo (has port names stored in RouteWaypoints by GenerateCargo)
+            _isMaritime = cargo.RouteWaypoints != null && cargo.RouteWaypoints.Count >= 2
+                          && MaritimeSimulationManager.Instance != null;
+            // Distancia real siempre (el aéreo la usa para costo/días; el marítimo no la mira).
+            _currentDist = CityDatabase.GetDistance(cargo.OriginCityId, cargo.DestinationCityId);
+
+            if (_isMaritime)
+            {
+                _maritimeOptions = MaritimeSimulationManager.Instance.GetRouteOptions(
+                    cargo.RouteWaypoints[0], cargo.RouteWaypoints[1]);
+                _selectedOptionIdx = 0;
+                // Pre-fill price from the selected (Direct) option cost with a margin
+                if (_maritimeOptions.Count > 0)
+                {
+                    int suggestedCost = _maritimeOptions[_selectedOptionIdx].EstimatedCostUSD;
+                    _priceInput = Mathf.RoundToInt(suggestedCost * 1.3f).ToString();
+                    if (_priceInputField != null) _priceInputField.text = _priceInput;
+                    _agentCost = suggestedCost;
+                }
+            }
+            else
+            {
+                RefreshAgents();
+            }
+
             ShowQuoting();
         }
 
+// Refresca agents
         private void RefreshAgents()
         {
             if (AgentManager.Instance == null) return;
@@ -423,6 +470,7 @@ namespace FreightForwarder.UI
             }
         }
 
+// Gestiona recalc cost.
         private void RecalcCost()
         {
             if (string.IsNullOrEmpty(_agentId) || _selectedCargo == null) return;
@@ -430,6 +478,9 @@ namespace FreightForwarder.UI
             if (agent == null) return;
             float dist = _currentDist;
             _agentCost = agent.CalculateCost(_selectedCargo, dist);
+            // El aéreo es más caro que el marítimo: rango $1.200–$30.000 (los bajos son más frecuentes por distancia).
+            if (_mode == Constants.TransportMode.Air)
+                _agentCost = Mathf.Clamp(_agentCost, 1200, 30000);
             if (string.IsNullOrEmpty(_priceInput))
             {
                 _priceInput = Mathf.RoundToInt(_agentCost * 1.35f).ToString();
@@ -441,26 +492,35 @@ namespace FreightForwarder.UI
                 _margin = 0f;
         }
 
+        private const float MODE_ROW_H = 26f;
+
+// Llena mode botones.
         private void PopulateModeButtons()
         {
             if (_modeButtonsRT == null) return;
             ClearChildren(_modeButtonsRT);
+            _routeOptsContent = null;
+
             var modes = _availableModes ?? GetAvailableModes();
+            bool maritimeSel = MaritimeSelected;
+
+            // El espacio de abajo (sección agente, oculta en cargas marítimas) absorbe la altura extra.
+            _modeButtonsRT.sizeDelta = new Vector2(_modeButtonsRT.sizeDelta.x, maritimeSel ? 160f : 26f);
+
+            // Fila de botones de modo: SIEMPRE visible, arriba.
             _modeBtnBgs = new Image[modes.Length];
             float bw = (PW - 18f) / Mathf.Max(1, modes.Length);
-
             for (int i = 0; i < modes.Length; i++)
             {
                 var m   = modes[i];
                 var rt  = MakeRect($"Mode{i}", _modeButtonsRT,
-                    new Vector2(0,0), new Vector2(0,1), new Vector2(0,0.5f),
-                    new Vector2(i * (bw+2f), 0), new Vector2(bw,0));
+                    new Vector2(0,1), new Vector2(0,1), new Vector2(0,1),
+                    new Vector2(i * (bw + 2f), 0f), new Vector2(bw, 22f));
                 var img = rt.gameObject.AddComponent<Image>();
                 img.color = _mode == m ? C_BTN_ON : C_BTN;
                 var btn = rt.gameObject.AddComponent<Button>();
                 btn.targetGraphic = img; SetBtnColors(btn);
                 Constants.TransportMode mc = m;
-                int mi = i;
                 btn.onClick.AddListener(() =>
                 {
                     _mode = mc;
@@ -468,16 +528,109 @@ namespace FreightForwarder.UI
                     if (_priceInputField != null) _priceInputField.text = "";
                     RefreshAgents(); PopulateModeButtons(); PopulateAgents(); RefreshQuoteForm();
                 });
-                MakeTxtStretch("Lbl", rt, Constants.GetTransportModeName(m), 10, FontStyle.Bold,
+                MakeTxtStretch("Lbl", rt, Constants.GetTransportModeName(m), 9, FontStyle.Bold,
                     Color.white, TextAnchor.MiddleCenter);
                 _modeBtnBgs[i] = img;
             }
+
+            if (maritimeSel)
+                PopulateRouteOptions();
+            else if (AirReady)
+            { /* Aéreo operativo: los agentes se muestran en su propia sección (PopulateAgents). */ }
+            else if (_mode == Constants.TransportMode.Air)
+                BuildModeNotice("✈  Aéreo: origen o destino sin aeropuerto.");
+            else
+                BuildModeNotice($"🚧 {Constants.GetTransportModeName(_mode)}: en desarrollo.");
         }
 
+// Construye mode notice.
+        private void BuildModeNotice(string msg)
+        {
+            MakeTxtPos("ModeNotice", _modeButtonsRT, new Vector2(4, -(MODE_ROW_H + 2f)),
+                new Vector2(PW - 24f, 46f),
+                msg, 10, FontStyle.Italic, new Color(0.95f, 0.8f, 0.3f), TextAnchor.UpperLeft);
+        }
+
+// Llena ruta options.
+        private void PopulateRouteOptions()
+        {
+            // Expand the mode botones RT to fit 3 option cards
+            if (_modeButtonsRT != null)
+                _modeButtonsRT.sizeDelta = new Vector2(_modeButtonsRT.sizeDelta.x, 160f);
+
+            if (_routeOptsContent == null)
+            {
+                _routeOptsContent = MakeRect("RouteOptsContent", _modeButtonsRT,
+                    Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                    Vector2.zero, Vector2.zero);
+                _routeOptsContent.offsetMin = Vector2.zero;
+                _routeOptsContent.offsetMax = new Vector2(0f, -MODE_ROW_H); // debajo de la fila de modos
+            }
+            ClearChildren(_routeOptsContent);
+
+            _routeOptBtnBgs = new Image[_maritimeOptions.Count];
+            const float OH = 44f;
+            for (int i = 0; i < _maritimeOptions.Count; i++)
+            {
+                var opt   = _maritimeOptions[i];
+                bool sel  = i == _selectedOptionIdx;
+                string costTag = opt.Type == ShipmentOption.OptionType.Direct ? "$$$"
+                               : opt.Type == ShipmentOption.OptionType.MixedA ? "$$" : "$";
+                string ports = opt.PortSequence.Count > 0
+                    ? string.Join(" → ", opt.PortSequence)
+                    : opt.DisplayLabel;
+
+                var card = MakeRect($"Opt{i}", _routeOptsContent,
+                    new Vector2(0,1), new Vector2(1,1), new Vector2(0,1),
+                    new Vector2(0, -(i * OH)), new Vector2(0, OH - 2f));
+                var img = card.gameObject.AddComponent<Image>();
+                img.color = sel ? C_BTN_ON : C_BTN;
+                var btn = card.gameObject.AddComponent<Button>();
+                btn.targetGraphic = img; SetBtnColors(btn);
+                int idx = i;
+                btn.onClick.AddListener(() =>
+                {
+                    _selectedOptionIdx = idx;
+                    _agentCost = _maritimeOptions[idx].EstimatedCostUSD;
+                    RecalcCost();
+                    PopulateRouteOptions();
+                    RefreshQuoteForm();
+                });
+                _routeOptBtnBgs[i] = img;
+
+                // Cards are stretch-anchored (sizeDelta.x = 0); use PW minus margins for text width.
+                float tw = PW - 30f;
+                // First line: label + TT + cost tag
+                MakeTxtPos($"L1_{i}", card, new Vector2(6,-3), new Vector2(tw, 15),
+                    $"{opt.DisplayLabel}  |  {opt.TotalTTDays} días  |  {costTag}  ~${opt.EstimatedCostUSD:N0}",
+                    10, FontStyle.Bold, Color.white, TextAnchor.UpperLeft);
+                // Second line: port sequence (truncated)
+                string ps = ports.Length > 48 ? ports.Substring(0, 45) + "…" : ports;
+                MakeTxtPos($"L2_{i}", card, new Vector2(6,-17), new Vector2(tw, 13),
+                    ps, 9, FontStyle.Normal, C_GREY, TextAnchor.UpperLeft);
+                // Third line: port days breakdown
+                int portCount = opt.PortSequence.Count;
+                MakeTxtPos($"L3_{i}", card, new Vector2(6,-30), new Vector2(tw, 13),
+                    $"Base {opt.BaseTTDays:F1}d + {portCount}×2d puertos = {opt.TotalTTDays}d",
+                    9, FontStyle.Italic, new Color(0.6f,0.8f,1f), TextAnchor.UpperLeft);
+            }
+        }
+
+// Llena agentes.
         private void PopulateAgents()
         {
             if (_agentContent == null) return;
             ClearChildren(_agentContent);
+
+            bool showAgents = AirReady;   // hoy solo el aéreo usa el flujo de agentes
+            if (_agentSectionLabelGO != null) _agentSectionLabelGO.SetActive(showAgents);
+            if (_agentScrollHostGO   != null) _agentScrollHostGO.SetActive(showAgents);
+
+            if (!showAgents)
+            {
+                _agentContent.sizeDelta = new Vector2(0, 0f);
+                return;
+            }
 
             if (_availableAgents.Count == 0)
             {
@@ -514,16 +667,34 @@ namespace FreightForwarder.UI
             }
         }
 
+// Refresca quote form
         private void RefreshQuoteForm()
         {
             if (_quotingCargoInfo == null || _selectedCargo == null) return;
             var c = _selectedCargo;
-            float dist = _currentDist;
 
-            _quotingCargoInfo.text = $"{CargoIcon(c.CargoType)}  {c.OriginCityId.Replace('_',' ')} → {c.DestinationCityId.Replace('_',' ')}\n" +
-                $"{Constants.GetCargoTypeName(c.CargoType)}  |  {c.Weight:F0}t  |  ${c.DeclaredValue:N0}";
-            _quotingDistText.text  = $"Distancia: {dist:N0} km";
-            if (_agentCostLabel != null) _agentCostLabel.text = $"Costo agente: ${_agentCost:N0}";
+            if (MaritimeSelected && c.RouteWaypoints?.Count >= 2)
+            {
+                _quotingCargoInfo.text =
+                    $"{CargoIcon(c.CargoType)}  {c.RouteWaypoints[0]} → {c.RouteWaypoints[1]}\n" +
+                    $"{Constants.GetCargoTypeName(c.CargoType)}  |  {c.Weight:F0}t  |  ${c.DeclaredValue:N0}";
+                var selOpt = _maritimeOptions.Count > _selectedOptionIdx ? _maritimeOptions[_selectedOptionIdx] : null;
+                _quotingDistText.text = selOpt != null
+                    ? $"TT: {selOpt.TotalTTDays} días  |  Costo operación: ${selOpt.EstimatedCostUSD:N0}"
+                    : "Ruta marítima";
+                if (_agentCostLabel != null)
+                    _agentCostLabel.text = selOpt != null
+                        ? $"Costo logístico: ${selOpt.EstimatedCostUSD:N0}"
+                        : "Costo logístico: $0";
+                _agentCost = selOpt?.EstimatedCostUSD ?? 0;
+            }
+            else
+            {
+                _quotingCargoInfo.text = $"{CargoIcon(c.CargoType)}  {CityDatabase.DisplayNameOf(c.OriginCityId)} → {CityDatabase.DisplayNameOf(c.DestinationCityId)}\n" +
+                    $"{Constants.GetCargoTypeName(c.CargoType)}  |  {c.Weight:F0}t  |  ${c.DeclaredValue:N0}";
+                _quotingDistText.text  = $"Distancia: {_currentDist:N0} km";
+                if (_agentCostLabel != null) _agentCostLabel.text = $"Costo agente: ${_agentCost:N0}";
+            }
             if (_clientTipText != null) _clientTipText.text = ClientTip(c.ClientType);
 
             // Margin display
@@ -535,74 +706,143 @@ namespace FreightForwarder.UI
                 _marginText.color = marginCol;
             }
 
-            // Submit button state
-            bool canSend = !string.IsNullOrEmpty(_agentId) &&
-                           int.TryParse(_priceInput, out int p) && p > _agentCost;
+            // Estado del botón Enviar. En cargas marítimas solo se cotiza el modo Marítimo;
+            // los demás modos se muestran pero todavía no están desarrollados.
+            bool modeReady = MaritimeSelected || (AirReady && !string.IsNullOrEmpty(_agentId));
+            bool canSend   = modeReady && int.TryParse(_priceInput, out int p) && p > _agentCost;
             if (_submitBtn != null)
             {
                 _submitBtn.interactable = canSend;
                 _submitBtnImg.color = canSend ? C_GREEN : new Color(0.3f,0.3f,0.3f,0.8f);
             }
             if (_submitHintText != null)
-                _submitHintText.text = (!canSend && !string.IsNullOrEmpty(_agentId))
-                    ? "El precio debe ser mayor al costo del agente." : "";
+            {
+                if (!canSend && modeReady)
+                    _submitHintText.text = "El precio debe ser mayor al costo logístico.";
+                else if (AirNoAirport)
+                    _submitHintText.text = "✈  Aéreo: origen o destino sin aeropuerto.";
+                else if (!modeReady && _mode != Constants.TransportMode.Maritime)
+                    _submitHintText.text = "🚧 Este modo todavía no está disponible.";
+                else
+                    _submitHintText.text = "";
+            }
         }
 
-        // ── Quote submission ──────────────────────────────────────────────────
+        // Envía cotización.
 
         private void SendQuote()
         {
             if (_selectedCargo == null || !int.TryParse(_priceInput, out int price)) return;
-            var agent = AgentManager.Instance?.GetAgent(_agentId);
-            if (agent == null) return;
+            // Solo se puede enviar en Marítimo (con ruta) o Aéreo (con aeropuertos y agente).
+            if (!MaritimeSelected && !(AirReady && !string.IsNullOrEmpty(_agentId))) return;
+            int currentDay = FFTimeManager.Instance?.CurrentDay ?? 0;
 
-            float dist     = _currentDist;
-            int   estDays  = EstimateDays(_mode, dist, agent.GetCurrentSpeedMultiplier());
-            int   currentDay = FFTimeManager.Instance?.CurrentDay ?? 0;
+            // ── Maritime flow ─────────────────────────────────────────────
+            if (MaritimeSelected && _maritimeOptions.Count > 0)
+            {
+                var opt    = _maritimeOptions[_selectedOptionIdx];
+                var client = ClientManager.Instance?.GetClientById(_selectedCargo.ClientId);
+
+                // Build a synthetic quote for client evaluation
+                _lastQuote = new Quote(
+                    _selectedCargo.Id, _selectedCargo.ClientId, _selectedCargo.ClientName,
+                    price, opt.EstimatedCostUSD, Constants.TransportMode.Maritime,
+                    "maritime", "Marítimo", opt.TotalTTDays, currentDay);
+
+                Quote.NegotiationResult result = client != null
+                    ? ClientManager.Instance.EvaluateQuote(_lastQuote, client, _selectedCargo)
+                    : Quote.NegotiationResult.Acceptance("Trato cerrado.", 0.5f);
+
+                if (result.Accepted)
+                {
+                    _lastQuote.Accept();
+                    CargoManager.Instance.AcceptMaritimeOption(_selectedCargo, opt, price, currentDay);
+                    _resultOk  = true;
+                    float m = price > 0 ? (float)(price - opt.EstimatedCostUSD) / price : 0f;
+                    _resultMsg = $"✅ {result.ClientMessage}\n\n" +
+                        $"Ruta: {opt.DisplayLabel}  |  TT: {opt.TotalTTDays} días\n" +
+                        $"Precio: ${price:N0}  |  Margen: {m*100:F0}%";
+                }
+                // Realiza if
+                else if (result.HasCounterOffer)
+                {
+                    _lastQuote.SetCounterOffer(result.CounterOfferPrice, result.ClientMessage);
+                    _resultOk  = false;
+                    _resultMsg = $"🔄 {result.ClientMessage}\n\nContraoferta: ${result.CounterOfferPrice:N0}";
+                }
+                else
+                {
+                    _lastQuote.Reject(result.ClientMessage);
+                    _resultOk  = false;
+                    _resultMsg = $"❌ {result.ClientMessage}";
+                }
+                ShowResult();
+                return;
+            }
+
+            // ── Estándar (non-maritime) flow ──────────────────────────────
+            var agentObj = AgentManager.Instance?.GetAgent(_agentId);
+            if (agentObj == null) return;
+
+            float dist    = _currentDist;
+            int   estDays = EstimateDays(_mode, dist, agentObj.GetCurrentSpeedMultiplier());
 
             _lastQuote = new Quote(
                 _selectedCargo.Id, _selectedCargo.ClientId, _selectedCargo.ClientName,
-                price, _agentCost, _mode, _agentId, agent.Name, estDays, currentDay);
+                price, _agentCost, _mode, _agentId, agentObj.Name, estDays, currentDay);
 
-            var client = ClientManager.Instance?.GetClientById(_selectedCargo.ClientId);
-            Quote.NegotiationResult result = client != null
-                ? ClientManager.Instance.EvaluateQuote(_lastQuote, client, _selectedCargo)
+            var clientStd = ClientManager.Instance?.GetClientById(_selectedCargo.ClientId);
+            Quote.NegotiationResult resultStd = clientStd != null
+                ? ClientManager.Instance.EvaluateQuote(_lastQuote, clientStd, _selectedCargo)
                 : Quote.NegotiationResult.Acceptance("Trato cerrado.", 0.5f);
 
-            if (result.Accepted)
+            if (resultStd.Accepted)
             {
                 _lastQuote.Accept();
                 CargoManager.Instance.AcceptQuote(_selectedCargo, _lastQuote, currentDay);
                 _resultOk  = true;
-                _resultMsg = $"✅ {result.ClientMessage}\n\nPrecio: ${price:N0}  |  Margen: {_margin*100:F0}%";
+                _resultMsg = $"✅ {resultStd.ClientMessage}\n\nPrecio: ${price:N0}  |  Margen: {_margin*100:F0}%";
             }
-            else if (result.HasCounterOffer)
+            // Realiza if
+            else if (resultStd.HasCounterOffer)
             {
-                _lastQuote.SetCounterOffer(result.CounterOfferPrice, result.ClientMessage);
+                _lastQuote.SetCounterOffer(resultStd.CounterOfferPrice, resultStd.ClientMessage);
                 _resultOk  = false;
-                _resultMsg = $"🔄 {result.ClientMessage}\n\nContraoferta: ${result.CounterOfferPrice:N0}";
+                _resultMsg = $"🔄 {resultStd.ClientMessage}\n\nContraoferta: ${resultStd.CounterOfferPrice:N0}";
             }
             else
             {
-                _lastQuote.Reject(result.ClientMessage);
+                _lastQuote.Reject(resultStd.ClientMessage);
                 _resultOk  = false;
-                _resultMsg = $"❌ {result.ClientMessage}";
+                _resultMsg = $"❌ {resultStd.ClientMessage}";
             }
-
             ShowResult();
         }
 
+// Aceptado counter oferta.
         private void AcceptCounterOffer()
         {
             _lastQuote.AcceptCounterOffer();
             int day = FFTimeManager.Instance?.CurrentDay ?? 0;
-            CargoManager.Instance.AcceptQuote(_selectedCargo, _lastQuote, day);
+
+            // Marítimo (ruta) solo si el modo elegido es marítimo; si no (aéreo), va por agente.
+            if (MaritimeSelected && _maritimeOptions.Count > 0)
+            {
+                var opt = _maritimeOptions[_selectedOptionIdx];
+                CargoManager.Instance.AcceptMaritimeOption(_selectedCargo, opt, _lastQuote.FinalPrice, day);
+            }
+            else
+            {
+                CargoManager.Instance.AcceptQuote(_selectedCargo, _lastQuote, day);
+            }
+
             _resultMsg = $"✅ Trato cerrado por ${_lastQuote.FinalPrice:N0}";
             _resultOk  = true;
             _lastQuote.HasCounterOffer = false;
             ShowResult();
         }
 
+// Gestiona reject counter oferta.
         private void RejectCounterOffer()
         {
             _lastQuote.RejectCounterOffer();
@@ -612,6 +852,7 @@ namespace FreightForwarder.UI
             ShowResult();
         }
 
+// Se invoca cuando regresa el resultado.
         private void OnResultBack()
         {
             if (!_resultOk && _selectedCargo != null &&
@@ -625,20 +866,34 @@ namespace FreightForwarder.UI
 
         private Constants.TransportMode[] GetAvailableModes()
         {
-            if (_selectedCargo == null) return new[] { Constants.TransportMode.Maritime };
-            var origin = CityDatabase.GetCity(_selectedCargo.OriginCityId);
-            var dest   = CityDatabase.GetCity(_selectedCargo.DestinationCityId);
-            if (origin == null || dest == null) return new[] { Constants.TransportMode.Maritime };
-
-            var modes = new List<Constants.TransportMode>();
-            if (origin.HasPort && dest.HasPort)   modes.Add(Constants.TransportMode.Maritime);
-            if (origin.HasAirport && dest.HasAirport) modes.Add(Constants.TransportMode.Air);
-            if (origin.CanLandTransportTo(dest) && origin.IsLandHub && dest.IsLandHub)
-                modes.Add(Constants.TransportMode.Land);
-            if (modes.Count == 0) modes.Add(Constants.TransportMode.Maritime);
-            return modes.ToArray();
+            // Mostramos siempre los 4 modos. Hoy solo el marítimo está desarrollado;
+            // los demás quedan visibles para implementarlos más adelante.
+            return new[]
+            {
+                Constants.TransportMode.Maritime,
+                Constants.TransportMode.Air,
+                Constants.TransportMode.Land,
+                Constants.TransportMode.Rail,
+            };
         }
 
+        // El marítimo es el único modo operativo hoy; el resto se muestra pero no se cotiza.
+        private bool MaritimeSelected => _isMaritime && _mode == Constants.TransportMode.Maritime;
+
+        // Aéreo operativo: modo Aéreo con aeropuerto en origen y destino (vuelo directo vía agentes).
+        private bool AirReady
+        {
+            get
+            {
+                if (_mode != Constants.TransportMode.Air || _selectedCargo == null) return false;
+                var o = CityDatabase.GetCity(_selectedCargo.OriginCityId);
+                var d = CityDatabase.GetCity(_selectedCargo.DestinationCityId);
+                return o != null && d != null && o.HasAirport && d.HasAirport;
+            }
+        }
+        private bool AirNoAirport => _mode == Constants.TransportMode.Air && !AirReady;
+
+// Gestiona estimate días.
         private static int EstimateDays(Constants.TransportMode mode, float dist, float speedMult)
         {
             float kmPerDay = mode == Constants.TransportMode.Air  ? 15000f :
@@ -647,6 +902,7 @@ namespace FreightForwarder.UI
             return Mathf.Max(1, Mathf.CeilToInt(dist / (kmPerDay * speedMult)));
         }
 
+// Cliente tip.
         private static string ClientTip(Constants.ClientType t)
         {
             switch (t)
@@ -661,6 +917,7 @@ namespace FreightForwarder.UI
             }
         }
 
+// Cargamento card bg.
         private static Color CargoCardBg(Constants.CargoType t)
         {
             Color c;
@@ -675,6 +932,7 @@ namespace FreightForwarder.UI
             return new Color(c.r, c.g, c.b, 0.10f);
         }
 
+// Cargamento icon.
         private static string CargoIcon(Constants.CargoType t)
         {
             switch (t)
@@ -687,6 +945,7 @@ namespace FreightForwarder.UI
             }
         }
 
+// Borra children.
         private static void ClearChildren(Transform t)
         {
             if (t == null) return;
@@ -694,7 +953,7 @@ namespace FreightForwarder.UI
                 Destroy(t.GetChild(i).gameObject);
         }
 
-        // ── UGUI factory ──────────────────────────────────────────────────────
+        // Obtiene or create canvas
 
         private static RectTransform GetOrCreateCanvas()
         {
@@ -770,6 +1029,7 @@ namespace FreightForwarder.UI
             return t;
         }
 
+// Gestiona make card.
         private RectTransform MakeCard(RectTransform content, int idx, float cardH, Color bg)
         {
             float w = PW - 10f;
@@ -792,6 +1052,7 @@ namespace FreightForwarder.UI
             return btn;
         }
 
+// Gestiona make input field.
         private InputField MakeInputField(string name, RectTransform parent, Vector2 pos, Vector2 size)
         {
             var rt = MakeRect(name, parent, new Vector2(0,1), new Vector2(0,1), new Vector2(0,1), pos, size);
@@ -823,13 +1084,16 @@ namespace FreightForwarder.UI
             return input;
         }
 
-        private void MakeSectionLabel(string text, RectTransform parent, ref float y)
+// Gestiona make section etiqueta.
+        private GameObject MakeSectionLabel(string text, RectTransform parent, ref float y)
         {
-            MakeTxtPos("SecLabel", parent, new Vector2(8, y), new Vector2(PW-16, 16),
+            var t = MakeTxtPos("SecLabel", parent, new Vector2(8, y), new Vector2(PW-16, 16),
                 text, 10, FontStyle.Bold, new Color(0.6f,0.8f,1f), TextAnchor.UpperLeft);
             y -= 18f;
+            return t.gameObject;
         }
 
+// Establece btn colors.
         private static void SetBtnColors(Button btn)
         {
             var cb = btn.colors;

@@ -7,50 +7,71 @@ namespace FreightForwarder.Models
     [Serializable]
     public class Agent
     {
-        // Identificación
+        // Gestiona id.
         public string Id { get; set; }
+// Gestiona name.
         public string Name { get; set; }
+// Gestiona home ciudad id.
         public string HomeCityId { get; set; }
+// Gestiona description.
         public string Description { get; set; }
 
         // Personalidad y estado
         public Constants.AgentPersonality Personality { get; set; }
+// Devuelve el estado actual
         public Constants.AgentState CurrentState { get; set; }
+// Devuelve el relationship
         public Constants.AgentRelationship Relationship { get; set; }
 
-        // Capacidad y carga
+        // Gestiona max capacity.
         public int MaxCapacity { get; set; }
+// Actual carga.
         public int CurrentLoad { get; set; }
+// Actual cargamento ids.
         public List<string> CurrentCargoIds { get; set; }
+// Gestiona operating regions.
         public List<string> OperatingRegions { get; set; }
+// Devuelve el supported modes
         public List<Constants.TransportMode> SupportedModes { get; set; }
+// Devuelve el supported cargo types
         public List<Constants.CargoType> SupportedCargoTypes { get; set; }
 
-        // Multiplicadores base
+        // Gestiona base precio multiplier.
         public float BasePriceMultiplier { get; set; }
+// Gestiona base velocidad multiplier.
         public float BaseSpeedMultiplier { get; set; }
+// Gestiona base reliability.
         public float BaseReliability { get; set; }
 
         // Multiplicadores actuales (modificados por estado)
         public float CurrentPriceMultiplier { get; set; }
 
-        // Confianza (0-100)
+        // Jugador trust.
         public float PlayerTrust { get; set; }
+// Agente trust.
         public float AgentTrust { get; set; }
 
-        // Estadísticas de entregas
+        // Gestiona total deliveries.
         public int TotalDeliveries { get; set; }
+// Gestiona successful deliveries.
         public int SuccessfulDeliveries { get; set; }
+// Fallado deliveries.
         public int FailedDeliveries { get; set; }
+// Gestiona abandoned deliveries.
         public int AbandonedDeliveries { get; set; }
+// Gestiona consecutive deliveries.
         public int ConsecutiveDeliveries { get; set; }
 
-        // Estado temporal
+        // Días until return.
         public int DaysUntilReturn { get; set; }
+// Días since last use.
         public int DaysSinceLastUse { get; set; }
+// Indica si in precio surge.
         public bool IsInPriceSurge { get; set; }
+// Precio surge días remaining.
         public int PriceSurgeDaysRemaining { get; set; }
 
+// Realiza agent
         public Agent()
         {
             CurrentCargoIds = new List<string>();
@@ -82,7 +103,7 @@ namespace FreightForwarder.Models
 
         // ═══════════════════════════════════
         // REGISTRO DE ENTREGA
-        // ═══════════════════════════════════
+        // Registra entrega.
 
         public void RecordDelivery(bool wasSuccessful, bool wasAbandoned = false)
         {
@@ -98,6 +119,7 @@ namespace FreightForwarder.Models
                 AgentTrust -= Constants.AGENT_TRUST_LOSS_PER_ABANDON;
                 PlayerTrust -= Constants.AGENT_TRUST_LOSS_PER_ABANDON / 2f;
             }
+            // Realiza if
             else if (wasSuccessful)
             {
                 SuccessfulDeliveries++;
@@ -120,6 +142,7 @@ namespace FreightForwarder.Models
             UpdateRelationship();
         }
 
+// Actualiza relationship
         private void UpdateRelationship()
         {
             float avg = (PlayerTrust + AgentTrust) / 2f;
@@ -134,7 +157,7 @@ namespace FreightForwarder.Models
 
         // ═══════════════════════════════════
         // ACTUALIZACIÓN DE ESTADO
-        // ═══════════════════════════════════
+        // Actualiza estado
 
         public void UpdateState()
         {
@@ -163,14 +186,17 @@ namespace FreightForwarder.Models
 
             if (CurrentLoad > MaxCapacity)
                 CurrentState = Constants.AgentState.Overworked;
+            // Realiza if
             else if (AgentTrust < 20)
                 CurrentState = Constants.AgentState.Angry;
+            // Realiza if
             else if (CurrentLoad >= MaxCapacity - 1 && MaxCapacity > 0)
                 CurrentState = Constants.AgentState.Stressed;
             else
                 CurrentState = Constants.AgentState.Idle;
         }
 
+// Actualiza price surge
         public void UpdatePriceSurge()
         {
             if (IsInPriceSurge)
@@ -182,6 +208,7 @@ namespace FreightForwarder.Models
                     CurrentPriceMultiplier = 1f;
                 }
             }
+            // Realiza if
             else if (Personality == Constants.AgentPersonality.Ambitious && CurrentState == Constants.AgentState.Idle)
             {
                 if (UnityEngine.Random.value < 0.10f)
@@ -195,7 +222,7 @@ namespace FreightForwarder.Models
 
         // ═══════════════════════════════════
         // CÁLCULO DE COSTOS Y VELOCIDAD
-        // ═══════════════════════════════════
+        // Obtiene actual price multiplier
 
         public float GetCurrentPriceMultiplier()
         {
@@ -209,6 +236,7 @@ namespace FreightForwarder.Models
             return mult;
         }
 
+// Obtiene actual velocidad multiplier
         public float GetCurrentSpeedMultiplier()
         {
             float mult = BaseSpeedMultiplier;
@@ -218,6 +246,7 @@ namespace FreightForwarder.Models
             return mult;
         }
 
+// Obtiene evento risk modifier
         public float GetEventRiskModifier()
         {
             float risk = 1.0f;
@@ -229,6 +258,7 @@ namespace FreightForwarder.Models
             return risk;
         }
 
+// Calcula cost
         public int CalculateCost(Cargo cargo, float distanceKm)
         {
             float transportMult = GetTransportModeMultiplier(cargo.TransportMode);
@@ -239,6 +269,7 @@ namespace FreightForwarder.Models
             return Math.Max(100, finalCost);
         }
 
+// Obtiene transport mode multiplier
         private float GetTransportModeMultiplier(Constants.TransportMode mode)
         {
             switch (mode)
@@ -252,6 +283,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene cargamento type multiplier
         private float GetCargoTypeMultiplier(Constants.CargoType type)
         {
             switch (type)
@@ -267,25 +299,30 @@ namespace FreightForwarder.Models
 
         // ═══════════════════════════════════
         // AUXILIARES
-        // ═══════════════════════════════════
+        // Verifica si puede operate in region
 
         public bool CanOperateInRegion(string region)
             => OperatingRegions.Count == 0 || OperatingRegions.Contains(region);
 
+// Verifica si puede maneja cargamento type
         public bool CanHandleCargoType(Constants.CargoType cargoType)
             => SupportedCargoTypes.Count == 0 || SupportedCargoTypes.Contains(cargoType);
 
+// Gestiona offers transport mode.
         public bool OffersTransportMode(Constants.TransportMode mode)
             => SupportedModes.Count == 0 || SupportedModes.Contains(mode);
 
+// Obtiene success rate
         public float GetSuccessRate()
             => TotalDeliveries == 0 ? 0.5f : (float)SuccessfulDeliveries / TotalDeliveries;
 
+// Indica si available.
         public bool IsAvailable()
             => CurrentState != Constants.AgentState.Disappeared &&
                CurrentState != Constants.AgentState.Bankrupt &&
                CurrentLoad < MaxCapacity;
 
+// Obtiene relationship emoji
         public string GetRelationshipEmoji()
         {
             switch (Relationship)
@@ -301,6 +338,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene estado emoji
         public string GetStateEmoji()
         {
             switch (CurrentState)
@@ -316,6 +354,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene personality description
         private string GetPersonalityDescription(Constants.AgentPersonality personality)
         {
             switch (personality)
@@ -338,6 +377,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Gestiona to string.
         public override string ToString()
             => $"{Name} [{Constants.GetAgentPersonalityName(Personality)}] | {GetStateEmoji()} | Carga: {CurrentLoad}/{MaxCapacity}";
     }

@@ -5,16 +5,17 @@ using UnityEngine;
 
 namespace FreightForwarder.Weather
 {
-    /// <summary>
-    /// Applies weather delays to cargo.
-    /// Initial delay: on cargo accepted.
-    /// Ongoing delay: once per game day if a cyclone sits on the route.
-    /// </summary>
+
+    // Applies weather delays to cargo.
+    // Initial delay: on cargo accepted.
+    // Ongoing delay: once per juego día if a cyclone sits on the ruta.
+
     public class WeatherImpact : Singleton<WeatherImpact>
     {
         private WeatherGrid   _grid;
         private WeatherConfig _config;
 
+// Inicializa ialize.
         public void Initialize(WeatherGrid grid, WeatherConfig config)
         {
             _grid   = grid;
@@ -27,6 +28,7 @@ namespace FreightForwarder.Weather
                 FFTimeManager.Instance.OnDayPassed += OnDayPassed;
         }
 
+// Elimina el marcador del registro y destruye su label al destruir el objeto.
         protected override void OnDestroy()
         {
             base.OnDestroy();
@@ -36,6 +38,7 @@ namespace FreightForwarder.Weather
                 FFTimeManager.Instance.OnDayPassed -= OnDayPassed;
         }
 
+// Se invoca cuando un cargamento es aceptado.
         private void OnCargoAccepted(Cargo cargo)
         {
             int delay = CalculateDelayDays(cargo);
@@ -46,10 +49,11 @@ namespace FreightForwarder.Weather
             Debug.Log($"[WeatherImpact] Carga {cargo.Id}: +{delay}d por clima al inicio");
         }
 
-        // Once per game day: add 1 extra day only if a cyclone directly affects the route
+        // Once per juego día: add 1 extra día only if a cyclone directly affects the ruta
         private void OnDayPassed()
         {
             if (CargoManager.Instance == null || _grid == null) return;
+// Foreach
             foreach (var cargo in CargoManager.Instance.ActiveCargos)
             {
                 if (RouteHasCyclone(cargo))
@@ -61,6 +65,7 @@ namespace FreightForwarder.Weather
             }
         }
 
+// Ruta determina si tiene cyclone.
         private bool RouteHasCyclone(Cargo cargo)
         {
             if (_grid == null) return false;
@@ -81,6 +86,7 @@ namespace FreightForwarder.Weather
             return false;
         }
 
+// Calcula delay days
         private int CalculateDelayDays(Cargo cargo)
         {
             if (_grid == null || _config == null) return 0;
@@ -97,6 +103,7 @@ namespace FreightForwarder.Weather
             return Mathf.RoundToInt(rawDelay);
         }
 
+// Latitud longitud to dir.
         private static Vector3 LatLonToDir(float lat, float lon)
         {
             float latR = lat * Mathf.Deg2Rad;
@@ -106,6 +113,7 @@ namespace FreightForwarder.Weather
                                Mathf.Cos(latR) * Mathf.Sin(lonR));
         }
 
+// Gestiona dir to latitud longitud.
         private static void DirToLatLon(Vector3 dir, out float lat, out float lon)
         {
             lat = Mathf.Asin(dir.y)         * Mathf.Rad2Deg;

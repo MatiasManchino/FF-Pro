@@ -134,7 +134,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &230796503
 Transform:
   m_ObjectHideFlags: 0
@@ -144,7 +144,7 @@ Transform:
   m_GameObject: {fileID: 230796501}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 232.63557, y: -0.00002, z: -85.58464}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -159,13 +159,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 306864344}
-  - component: {fileID: 306864346}
-  - component: {fileID: 306864348}
-  - component: {fileID: 306864349}
-  - component: {fileID: 306864353}
-  - component: {fileID: 306864352}
-  - component: {fileID: 306864351}
-  - component: {fileID: 306864350}
   m_Layer: 0
   m_Name: '[FF System]'
   m_TagString: Untagged
@@ -182,108 +175,12 @@ Transform:
   m_GameObject: {fileID: 306864342}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 666.8311, y: -0.00003, z: 201.14217}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &306864346
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9ba438d0b01c81c4fa4cf5d53f1809a6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.UI.NewsTicker
---- !u!114 &306864348
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e9aeb6fa9e360a34ea400bda078df139, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.UI.FFUIManager
---- !u!114 &306864349
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 918da958eb033074695860fb2398e7ef, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.UI.MarketPanel
---- !u!114 &306864350
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f6df1b41e41df0944a952d110e7e1f6a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::CloudLayer
-  degreesPerGameDay: 5
---- !u!114 &306864351
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ed9dc7003a55d3e44a731c99d42e6cf1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.Weather.CloudSpriteInstance
-  Lat: 30
-  Lon: 30
-  TargetAlpha: 1
-  DriftLon: 1
-  DriftLat: 1
-  IsStorm: 0
---- !u!114 &306864352
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c6e299d9259ce7b41ada903e56534e36, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.Weather.CloudRenderer
---- !u!114 &306864353
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 306864342}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 802da65c2fc99404fa0959565a352798, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.Weather.HurricaneController
-  rotationSpeed: 0.35
-  buildSpeed: 0.018
-  driftLonPerSec: 0.04
-  driftLatPerSec: 0.015
-  spriteScale: 320
 --- !u!1 &2106644832
 GameObject:
   m_ObjectHideFlags: 0
@@ -294,6 +191,10 @@ GameObject:
   m_Component:
   - component: {fileID: 2106644834}
   - component: {fileID: 2106644833}
+  - component: {fileID: 2106644838}
+  - component: {fileID: 2106644836}
+  - component: {fileID: 2106644835}
+  - component: {fileID: 2106644839}
   m_Layer: 0
   m_Name: GameBootstrapper
   m_TagString: Untagged
@@ -318,7 +219,18 @@ MonoBehaviour:
   worldMap: {fileID: 0}
   mapCameraController: {fileID: 0}
   uiManager: {fileID: 0}
-  daylightVerifier: {fileID: 0}
+  shipPrefab: {fileID: -6689036041284674117, guid: 9f30f01db96ad064bb6fdf558c2223a3, type: 3}
+  shipScale: 0.003
+  shipBowAxis: {x: 90, y: 0, z: 90}
+  planePrefab: {fileID: 0}
+  planeScale: 0.00005
+  planeBowAxis: {x: 0, y: 0, z: 1}
+  truckPrefab: {fileID: 0}
+  truckScale: 0.00005
+  truckBowAxis: {x: 0, y: 0, z: 1}
+  trainPrefab: {fileID: 0}
+  trainScale: 0.00005
+  trainBowAxis: {x: 0, y: 0, z: 1}
 --- !u!4 &2106644834
 Transform:
   m_ObjectHideFlags: 0
@@ -334,6 +246,60 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2106644835
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106644832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6e299d9259ce7b41ada903e56534e36, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.Weather.CloudRenderer
+--- !u!114 &2106644836
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106644832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed9dc7003a55d3e44a731c99d42e6cf1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.Weather.CloudSpriteInstance
+  Lat: 30
+  Lon: 30
+  TargetAlpha: 0
+  DriftLon: 0
+  DriftLat: 0
+  IsStorm: 0
+--- !u!114 &2106644838
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106644832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 918da958eb033074695860fb2398e7ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.UI.MarketPanel
+--- !u!114 &2106644839
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2106644832}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e9aeb6fa9e360a34ea400bda078df139, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FreightForwarder.UI.FFUIManager
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

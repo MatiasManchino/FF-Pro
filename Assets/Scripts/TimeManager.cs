@@ -3,6 +3,7 @@ using UnityEngine;
 
 public class TimeManager : MonoBehaviour
 {
+// Gestiona instance.
     public static TimeManager Instance { get; private set; }
 
     // 1 día de juego = 20 minutos reales = 1200 segundos reales.
@@ -22,10 +23,15 @@ public class TimeManager : MonoBehaviour
 
     public const float BA_UTC_OFFSET = -3f;
 
+// Devuelve el velocidad multiplier actual
     public float    CurrentSpeedMultiplier => TimeSpeeds[_speedIndex];
+// Devuelve el velocidad índice actual
     public int      CurrentSpeedIndex      => _speedIndex;
+// Día progress.
     public float    DayProgress            { get; private set; }
+// Actual utc tiempo.
     public DateTime CurrentUtcTime         { get; private set; }
+// Actual local tiempo
     public DateTime CurrentLocalTime       => CurrentUtcTime.AddHours(BA_UTC_OFFSET);
 
     private DateTime _startUtc;
@@ -37,21 +43,27 @@ public class TimeManager : MonoBehaviour
     private int _lastYear = -1;
 
     // ── Eventos ────────────────────────────────────────────────────────────
-    /// <summary>Se dispara al comenzar un nuevo día UTC.</summary>
+    // Se dispara al comenzar un nuevo día UTC.
     public event Action<DateTime> OnNewDay;
     
-    /// <summary>Se dispara al comenzar un nuevo mes.</summary>
+    // Se dispara al comenzar un nuevo mes.
     public event Action<DateTime> OnNewMonth;
     
-    /// <summary>Se dispara al comenzar un nuevo año.</summary>
+    // Se dispara al comenzar un nuevo año.
     public event Action<DateTime> OnNewYear;
 
+    // Se dispara cuando cambia el minuto de juego (para relojes en vivo del HUD).
+    public event Action OnMinuteChanged;
+    private long _lastMinuteStamp = long.MinValue;
+
+// Configura referencias tempranas antes de Start.
     void Awake()
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
     }
 
+// Inicializa el marcador: obtiene referencias, posiciona el objeto, crea el label y registra la ciudad.
     void Start()
     {
         _startUtc            = new DateTime(_startYear, _startMonth, _startDay,
@@ -67,6 +79,7 @@ public class TimeManager : MonoBehaviour
         UpdateDayProgress();
     }
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
     void Update()
     {
         if (CurrentSpeedMultiplier > 0f)
@@ -79,14 +92,23 @@ public class TimeManager : MonoBehaviour
         
         CheckDateChanges();
         UpdateDayProgress();
+
+        // Notificar cambio de minuto de juego (reloj en vivo del HUD), como máximo una vez por frame.
+        long minuteStamp = CurrentUtcTime.Ticks / TimeSpan.TicksPerMinute;
+        if (minuteStamp != _lastMinuteStamp)
+        {
+            _lastMinuteStamp = minuteStamp;
+            OnMinuteChanged?.Invoke();
+        }
     }
 
+// Actualiza día progress
     private void UpdateDayProgress() =>
         DayProgress = (float)(CurrentUtcTime.TimeOfDay.TotalSeconds / 86400.0);
 
-    /// <summary>
-    /// Verifica si hubo cambio de día, mes o año y dispara los eventos correspondientes.
-    /// </summary>
+
+    // Verifica si hubo cambio de día, mes o año y dispara los eventos correspondientes.
+
     private void CheckDateChanges()
     {
         int currentDayOfYear = CurrentUtcTime.DayOfYear;
@@ -106,7 +128,7 @@ public class TimeManager : MonoBehaviour
             _lastDayOfYear = currentDayOfYear;
             OnNewDay?.Invoke(CurrentUtcTime);
         }
-        // Detectar cambio de mes
+        // Realiza if
         else if (currentMonth != _lastMonth)
         {
             _lastMonth = currentMonth;
@@ -116,7 +138,7 @@ public class TimeManager : MonoBehaviour
             _lastDayOfYear = currentDayOfYear;
             OnNewDay?.Invoke(CurrentUtcTime);
         }
-        // Detectar cambio de día
+        // Realiza if
         else if (currentDayOfYear != _lastDayOfYear)
         {
             _lastDayOfYear = currentDayOfYear;
@@ -124,18 +146,18 @@ public class TimeManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Cambia la velocidad de simulación.
-    /// </summary>
-    /// <param name="i">Índice de velocidad (0=Pausa, 1=1x, 2=10x, 3=100x, 4=1000x).</param>
+
+    // Cambia la velocidad de simulación.
+
+    // <param name="i">Índice de velocidad (0=Pausa, 1=1x, 2=10x, 3=100x, 4=1000x).</param>
     public void SetSpeedIndex(int i)
     {
         if (i >= 0 && i < TimeSpeeds.Length) _speedIndex = i;
     }
 
-    /// <summary>
-    /// Obtiene el nombre de la velocidad actual.
-    /// </summary>
+
+    // Obtiene el nombre de la velocidad actual.
+
     public string GetCurrentSpeedLabel()
     {
         return _speedIndex switch
@@ -149,27 +171,27 @@ public class TimeManager : MonoBehaviour
         };
     }
 
-    /// <summary>
-    /// Obtiene el progreso del día como porcentaje (0-100%).
-    /// </summary>
+
+    // Obtiene el progreso del día como porcentaje (0-100%).
+
     public float GetDayProgressPercent()
     {
         return DayProgress * 100f;
     }
 
-    /// <summary>
-    /// Calcula los días transcurridos desde el inicio de la simulación.
-    /// </summary>
+
+    // Calcula los días transcurridos desde el inicio de la simulación.
+
     public int GetElapsedDays()
     {
         return (int)(_elapsedGameSeconds / 86400.0);
     }
 
-    /// <summary>
-    /// Obtiene la estación del año para el hemisferio especificado.
-    /// </summary>
-    /// <param name="northernHemisphere">True para hemisferio norte, false para sur.</param>
-    /// <returns>Nombre de la estación.</returns>
+
+    // Obtiene la estación del año para el hemisferio especificado.
+
+    // <param name="northernHemisphere">Verdadero para hemisferio norte, false para sur.</param>
+    // Obtiene actual season
     public string GetCurrentSeason(bool northernHemisphere = true)
     {
         int month = CurrentUtcTime.Month;
@@ -198,9 +220,9 @@ public class TimeManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Reinicia la simulación a la fecha/hora inicial.
-    /// </summary>
+
+    // Reinicia la simulación a la fecha/hora inicial.
+
     public void ResetToStart()
     {
         _elapsedGameSeconds = 0.0;

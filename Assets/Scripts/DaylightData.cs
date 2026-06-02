@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
 using UnityEngine;
@@ -25,3 +26,4 @@ public class DaylightData : ScriptableObject
         return -1f;
     }
 }
+#endif

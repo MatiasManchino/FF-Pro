@@ -6,61 +6,84 @@ namespace FreightForwarder.Models
     [Serializable]
     public class Cargo
     {
-        // Identificación
+        // Gestiona id.
         public string Id { get; set; }
+// Devuelve el cargo type
         public Constants.CargoType CargoType { get; set; }
 
-        // Origen y Destino
+        // Origen ciudad id.
         public string OriginCityId { get; set; }
+// Destino ciudad id.
         public string DestinationCityId { get; set; }
 
-        // Características físicas
+        // Gestiona weight.
         public float Weight { get; set; }
+// Gestiona volume.
         public float Volume { get; set; }
+// Gestiona declared valor.
         public int DeclaredValue { get; set; }
 
-        // Cliente
+        // Cliente id.
         public string ClientId { get; set; }
+// Cliente name.
         public string ClientName { get; set; }
+// Devuelve el client type
         public Constants.ClientType ClientType { get; set; }
 
         // Estado
         public Constants.CargoStatus Status { get; set; }
+// Gestiona expiration día.
         public int ExpirationDay { get; set; }
+// Día created.
         public int DayCreated { get; set; }
 
-        // Cotización y precios
+        // Gestiona quoted precio.
         public int QuotedPrice { get; set; }
+// Gestiona final precio.
         public int FinalPrice { get; set; }
+// Agente cost.
         public int AgentCost { get; set; }
+// Gestiona margin.
         public float Margin { get; set; }
 
-        // Tiempos
+        // Inicio día.
         public int StartDay { get; set; }
+// Gestiona estimated arrival día.
         public int EstimatedArrivalDay { get; set; }
+// Gestiona actual arrival día.
         public int ActualArrivalDay { get; set; }
+// Días remaining.
         public int DaysRemaining { get; set; }
+// Gestiona total transit días.
         public int TotalTransitDays { get; set; }
 
         // Transporte y agente
         public Constants.TransportMode TransportMode { get; set; }
+// Agente id.
         public string AgentId { get; set; }
+// Determina si tiene insurance.
         public bool HasInsurance { get; set; }
 
-        // Eventos y rutas
+        // Eventos encountered.
         public List<string> EventsEncountered { get; set; }
+// Ruta waypoints.
         public List<string> RouteWaypoints { get; set; }
 
         // Transporte preferido (recomendación)
         public Constants.TransportMode PreferredTransport { get; set; }
+// Gestiona transport reason.
         public string TransportReason { get; set; }
 
-        // Intervención del agente
+        // Determina si tiene agent intervened.
         public bool HasAgentIntervened { get; set; }
+// Agente intervention type.
         public string AgentInterventionType { get; set; }
+// Gestiona was abandoned by agente.
         public bool WasAbandonedByAgent { get; set; }
+// Agente extra cost.
         public int AgentExtraCost { get; set; }
 
+// Realiza cargamento
         public Cargo()
         {
             Id = Guid.NewGuid().ToString();
@@ -91,12 +114,18 @@ namespace FreightForwarder.Models
             DayCreated = dayCreated;
         }
 
+// Indica si expirado.
         public bool IsExpired(int currentDay) => currentDay >= ExpirationDay && Status == Constants.CargoStatus.Available;
+// Indica si active.
         public bool IsActive() => Status == Constants.CargoStatus.Active;
+// Indica si completado.
         public bool IsCompleted() => Status == Constants.CargoStatus.Completed;
+// Indica si fallado.
         public bool IsFailed() => Status == Constants.CargoStatus.Failed;
+// Días until expiration.
         public int DaysUntilExpiration(int currentDay) => ExpirationDay - currentDay;
 
+// Gestiona to string.
         public override string ToString()
             => $"{Constants.GetCargoTypeName(CargoType)}: {OriginCityId} → {DestinationCityId} | {Weight}t | {Status}";
     }

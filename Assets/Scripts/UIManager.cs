@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using FreightForwarder.Map;
 
 public class UIManager : MonoBehaviour
 {
@@ -17,19 +18,22 @@ public class UIManager : MonoBehaviour
     private MapCameraController  _camController;
 
     // ── Hover coords ─────────────────────────────────────────────────────────
-    private string  _coordText = "";
+    private string  _coordText   = "";
+    private string  _terrainType = "Espacio";
     private bool    _hovering;
     private Vector3 _lastMousePos = Vector3.negativeInfinity;
 
-    // ── RefreshDisplay dirty-check cache ──────────────────────────────────────
-    private string _lastCityName  = null;
-    private int    _lastZoomInt   = -1;
-    private bool   _lastHovering  = false;
-    private string _lastCoordText = "";
-    private bool   _lastTyping    = false;
-    private string _lastSearch    = "";
+    // ── RefreshDisplay dirty-check caché ──────────────────────────────────────
+    private string _lastCityName    = null;
+    private int    _lastZoomInt     = -1;
+    private bool   _lastHovering    = false;
+    private string _lastCoordText   = "";
+    private string _lastTerrainType = "";
+    private bool   _lastTyping      = false;
+    private string _lastSearch      = "";
 
     private static Font _fontCache;
+// Devuelve el font
     private static Font _font => _fontCache != null
         ? _fontCache : (_fontCache = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
 
@@ -40,8 +44,15 @@ public class UIManager : MonoBehaviour
     private RectTransform _coordsPanel;
     private GameObject    _searchOverlay;
     private Text          _searchText;
+    private Image         _toolsRouteBtnBg;
+    private Text          _toolsRouteBtnLabel;
+    private bool          _toolsRouteActive = false;
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+#if UNITY_EDITOR
+    private RouteEditorTool _routeEditorTool;
+#endif
+
+    // Se ejecuta al iniciar el componente.
 
     private void Start()
     {
@@ -52,6 +63,7 @@ public class UIManager : MonoBehaviour
         CenterUIHubPanel();
     }
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
     private void Update()
     {
         UpdateHoverCoords();
@@ -62,13 +74,14 @@ public class UIManager : MonoBehaviour
 
     private void UpdateHoverCoords()
     {
-        if (_cam == null || WorldMap.Instance == null) { _hovering = false; return; }
+        if (_cam == null || WorldMap.Instance == null) { _hovering = false; _terrainType = "Espacio"; return; }
 
         Vector3 mousePos = Input.mousePosition;
         if ((mousePos - _lastMousePos).sqrMagnitude < 4f) return;
         _lastMousePos = mousePos;
 
         Ray ray = _cam.ScreenPointToRay(mousePos);
+
         Vector3 center = WorldMap.Instance.transform.position;
         float   radius = WorldMap.Instance.earthRadius;
 
@@ -80,13 +93,20 @@ public class UIManager : MonoBehaviour
             float lon = Mathf.Atan2(dir.z, dir.x) * Mathf.Rad2Deg;
             _coordText = $"Lat: {lat:F2}°   Lon: {lon:F2}°";
             _hovering  = true;
+
+            if (WaterMaskSampler.Instance != null && WaterMaskSampler.Instance.IsReady)
+                _terrainType = WaterMaskSampler.Instance.GetTerrainLabel(lat, lon);
+            else
+                _terrainType = "?";
         }
         else
         {
-            _hovering = false;
+            _hovering    = false;
+            _terrainType = "Espacio";
         }
     }
 
+// Gestiona ray sphere.
     private static bool RaySphere(Ray ray, Vector3 center, float radius, out Vector3 hitPoint)
     {
         hitPoint = Vector3.zero;
@@ -102,7 +122,7 @@ public class UIManager : MonoBehaviour
         return true;
     }
 
-    // ── Display refresh ───────────────────────────────────────────────────────
+    // Refresca visualización
 
     private void RefreshDisplay()
     {
@@ -119,14 +139,25 @@ public class UIManager : MonoBehaviour
         {
             int  zoomInt = Mathf.RoundToInt(_camController.ZoomPercent);
             bool hov     = _hovering;
-            if (zoomInt != _lastZoomInt || hov != _lastHovering || _coordText != _lastCoordText)
+            if (zoomInt != _lastZoomInt || hov != _lastHovering ||
+                _coordText != _lastCoordText || _terrainType != _lastTerrainType)
             {
+                string tc = _terrainType switch
+                {
+                    "Agua"    => "#00CFFF",
+                    "Tierra"  => "#A8C87A",
+                    "Hielo"   => "#AADEFF",
+                    "Espacio" => "#888888",
+                    _         => "#FFFFFF",
+                };
+                string terrainLine = $"<color={tc}>{_terrainType}</color>";
                 _coordsText.text = hov
-                    ? $"Zoom: {zoomInt}%\n{_coordText}"
-                    : $"Zoom: {zoomInt}%";
-                _lastZoomInt   = zoomInt;
-                _lastHovering  = hov;
-                _lastCoordText = _coordText;
+                    ? $"Zoom: {zoomInt}%\n{_coordText}\n{terrainLine}"
+                    : $"Zoom: {zoomInt}%\n{terrainLine}";
+                _lastZoomInt     = zoomInt;
+                _lastHovering    = hov;
+                _lastCoordText   = _coordText;
+                _lastTerrainType = _terrainType;
             }
         }
 
@@ -150,13 +181,13 @@ public class UIManager : MonoBehaviour
         }
     }
 
-    // ── UI construction ───────────────────────────────────────────────────────
+    // Construye UI.
 
     private void BuildUI()
     {
         var canvasRT = GetOrCreateCanvas();
 
-        // ── City navigation info — bottom center ──────────────────────────────
+        // ── Ciudad navigation info — bottom center ──────────────────────────────
         var navPanel = MakeRect("CityNavPanel", canvasRT,
             new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(0.5f, 0),
             new Vector2(0, 28f + 6f + 44f), new Vector2(350, 44f));
@@ -170,16 +201,42 @@ public class UIManager : MonoBehaviour
             11, FontStyle.Normal, Color.gray, TextAnchor.UpperCenter, stretch: true);
 
         // ── Coordinates — bottom right ────────────────────────────────────────
+        const float COORDS_Y = 28f + 6f;
+        const float COORDS_H = 70f;
         _coordsPanel = MakeRect("CoordsPanel", canvasRT,
             new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
-            new Vector2(-10f, 28f + 6f), new Vector2(280, 48f));
+            new Vector2(-10f, COORDS_Y), new Vector2(280, COORDS_H));
         MakeImage(_coordsPanel, new Color(0, 0, 0, 0.55f));
 
         _coordsText = MakeText("CoordsLabel", _coordsPanel,
-            Vector2.zero, Vector2.zero, "Zoom: 0%",
-            13, FontStyle.Bold, Color.white, TextAnchor.MiddleRight, stretch: true);
+            new Vector2(4, 4), new Vector2(-4, -4), "Zoom: 0%",
+            12, FontStyle.Bold, Color.white, TextAnchor.UpperRight, stretch: true);
+        _coordsText.GetComponent<Text>().supportRichText = true;
 
-        // ── Search overlay — centered modal ───────────────────────────────────
+        // ── Herramientas Ruta botón — above coords panel ───────────────────────────
+        const float BTN_H = 26f;
+        var btnRT = MakeRect("ToolsRouteBtn", canvasRT,
+            new Vector2(1, 0), new Vector2(1, 0), new Vector2(1, 0),
+            new Vector2(-10f, COORDS_Y + COORDS_H + 4f), new Vector2(280, BTN_H));
+        _toolsRouteBtnBg = MakeImage(btnRT, new Color(0.10f, 0.10f, 0.12f, 0.85f));
+        _toolsRouteBtnLabel = MakeText("ToolsRouteBtnLabel", btnRT,
+            Vector2.zero, Vector2.zero, "Tools Route  [ OFF ]",
+            12, FontStyle.Bold, new Color(0.6f, 0.6f, 0.6f), TextAnchor.MiddleCenter, stretch: true);
+        var btn = btnRT.gameObject.AddComponent<Button>();
+        var cb  = new ColorBlock
+        {
+            normalColor      = Color.white,
+            highlightedColor = new Color(1f, 1f, 1f, 0.85f),
+            pressedColor     = new Color(0.8f, 0.8f, 0.8f),
+            selectedColor    = Color.white,
+            disabledColor    = new Color(0.5f, 0.5f, 0.5f),
+            colorMultiplier  = 1f,
+            fadeDuration     = 0.1f
+        };
+        btn.colors = cb;
+        btn.onClick.AddListener(OnToolsRouteBtnClick);
+
+        // ── Búsqueda overlay — centered modal ───────────────────────────────────
         _searchOverlay = new GameObject("SearchOverlay");
         var overlayRT  = _searchOverlay.AddComponent<RectTransform>();
         overlayRT.SetParent(canvasRT, false);
@@ -205,7 +262,29 @@ public class UIManager : MonoBehaviour
         _searchOverlay.SetActive(false);
     }
 
-    // ── Legacy helpers ────────────────────────────────────────────────────────
+    // Se invoca cuando se pulsa el botón de ruta de herramientas.
+
+    private void OnToolsRouteBtnClick()
+    {
+        _toolsRouteActive = !_toolsRouteActive;
+#if UNITY_EDITOR
+        if (_routeEditorTool == null)
+            _routeEditorTool = FindAnyObjectByType<RouteEditorTool>();
+        if (_routeEditorTool != null)
+            _routeEditorTool.toolActive = _toolsRouteActive;
+#endif
+        if (_toolsRouteBtnBg != null)
+            _toolsRouteBtnBg.color = _toolsRouteActive
+                // Realiza color
+                ? new Color(0.10f, 0.30f, 0.12f, 0.90f)
+                : new Color(0.10f, 0.10f, 0.12f, 0.85f);
+        if (_toolsRouteBtnLabel != null)
+            _toolsRouteBtnLabel.text = _toolsRouteActive
+                ? "Tools Route  [ ON ]"
+                : "Tools Route  [ OFF ]";
+    }
+
+    // Gestiona center UI hub panel.
 
     public void CenterUIHubPanel()
     {
@@ -229,7 +308,7 @@ public class UIManager : MonoBehaviour
         c.sortingOrder = 10;
         var cs = cgo.AddComponent<CanvasScaler>();
         cs.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        cs.referenceResolution = new Vector2(1920, 1080);
+        cs.referenceResolution = new Vector2(1280, 720);
         cs.matchWidthOrHeight  = 0.5f;
         cgo.AddComponent<GraphicRaycaster>();
         return cgo.GetComponent<RectTransform>();
@@ -250,6 +329,7 @@ public class UIManager : MonoBehaviour
         return rt;
     }
 
+// Gestiona make imagen.
     private static Image MakeImage(RectTransform rt, Color color)
     {
         var img = rt.gameObject.AddComponent<Image>();

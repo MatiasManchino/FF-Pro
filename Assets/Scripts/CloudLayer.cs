@@ -10,6 +10,7 @@ public class CloudLayer : MonoBehaviour
 
     private static readonly float[] SpeedMults = { 0f, 1f, 10f, 100f, 1000f };
 
+// Ejecuta las comprobaciones necesarias en cada fotograma del juego.
     void Update()
     {
         float mult = 1f;

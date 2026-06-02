@@ -6,6 +6,7 @@ using System.IO;
 public class CreateMainScene
 {
     [MenuItem("Tools/Create Main Scene")]
+// Crea escena
     static void CreateScene()
     {
         // Asegurar que la carpeta Scenes exista

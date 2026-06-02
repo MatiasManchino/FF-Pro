@@ -4,51 +4,81 @@ using UnityEngine;
 
 namespace FreightForwarder.Models
 {
+    // Nivel de lealtad del cliente según entregas exitosas acumuladas.
+    public enum ClientTier { Nuevo, Frecuente, VIP, Diamante }
+
     [Serializable]
     public class Client
     {
-        // Identificación
+        // Gestiona id.
         public string Id { get; set; }
+// Gestiona company name.
         public string CompanyName { get; set; }
+// Devuelve el client type
         public Constants.ClientType ClientType { get; set; }
+// Gestiona personality description.
         public string PersonalityDescription { get; set; }
 
-        // Relación
+        // Gestiona relationship nivel.
         public float RelationshipLevel { get; set; }
+// Gestiona anger nivel.
         public int AngerLevel { get; set; }
+// Indica si lista negra.
         public bool IsBlacklisted { get; set; }
+// Días until anger decay.
         public int DaysUntilAngerDecay { get; set; }
 
-        // Comportamiento de pago
+        // Pago delay.
         public int PaymentDelay { get; set; }
+// Gestiona early pago chance.
         public float EarlyPaymentChance { get; set; }
+// Tardío pago chance.
         public float LatePaymentChance { get; set; }
+// Tardío pago penalty.
         public float LatePaymentPenalty { get; set; }
 
-        // Tolerancia
+        // Gestiona delay tolerance.
         public int DelayTolerance { get; set; }
+// Gestiona damage tolerance.
         public float DamageTolerance { get; set; }
+// Gestiona accepts negotiation.
         public bool AcceptsNegotiation { get; set; }
+// Gestiona max margin tolerance.
         public float MaxMarginTolerance { get; set; }
 
-        // Historial
+        // Gestiona total deliveries.
         public int TotalDeliveries { get; set; }
+// Gestiona successful deliveries.
         public int SuccessfulDeliveries { get; set; }
+// Fallado deliveries.
         public int FailedDeliveries { get; set; }
+// Gestiona complaints count.
         public int ComplaintsCount { get; set; }
+// Gestiona recommendations given.
         public int RecommendationsGiven { get; set; }
+// Gestiona pending offers.
         public int PendingOffers { get; set; }
+// Gestiona last interaction día.
         public int LastInteractionDay { get; set; }
+// Gestiona total profit.
+        public int TotalProfit { get; set; }
+        public int LastRelationDecayDay { get; set; }
 
-        // Estado especial
+        // Indica si active.
         public bool IsActive { get; set; }
+// Indica si vip.
         public bool IsVip { get; set; }
+// Determina si tiene active contract.
         public bool HasActiveContract { get; set; }
+// Gestiona contract días remaining.
         public int ContractDaysRemaining { get; set; }
+// Gestiona favorite rutas.
         public List<string> FavoriteRoutes { get; set; }
 
+// Realiza cliente
         public Client() { FavoriteRoutes = new List<string>(); }
 
+// Client
         public Client(string companyName, Constants.ClientType clientType) : this()
         {
             Id = Guid.NewGuid().ToString();
@@ -105,6 +135,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Public
         public (float complaintChance, bool becomesAngry) ReactToDelay(int delayDays)
         {
             if (delayDays <= DelayTolerance) return (0f, false);
@@ -114,6 +145,7 @@ namespace FreightForwarder.Models
             return (chance, chance > 0.5f);
         }
 
+// Public
         public (float complaintChance, bool becomesAngry) ReactToDamage(float damagePercentage)
         {
             if (damagePercentage <= DamageTolerance) return (0f, false);
@@ -123,6 +155,7 @@ namespace FreightForwarder.Models
             return (chance, chance > 0.6f);
         }
 
+// Public
         public (float rejectionChance, bool becomesAngry) ReactToHighPrice(float marginPercentage)
         {
             if (marginPercentage <= MaxMarginTolerance) return (0f, false);
@@ -132,6 +165,7 @@ namespace FreightForwarder.Models
             return (chance, chance > 0.7f);
         }
 
+// Gestiona decide to recommend.
         public bool DecideToRecommend()
         {
             if (RelationshipLevel <= 70) return false;
@@ -142,12 +176,14 @@ namespace FreightForwarder.Models
             return UnityEngine.Random.value < chance;
         }
 
+// Gestiona decide to become vip.
         public bool DecideToBecomeVip()
         {
             if (IsVip || TotalDeliveries < 10 || RelationshipLevel < 80) return false;
             return UnityEngine.Random.value < 0.10f;
         }
 
+// Gestiona decide to renew contract.
         public bool DecideToRenewContract()
         {
             if (!HasActiveContract) return false;
@@ -172,6 +208,7 @@ namespace FreightForwarder.Models
                 RelationshipLevel = Mathf.Min(100, RelationshipLevel + 8);
                 AddFavoriteRoute(originCityId, destinationCityId);
             }
+            // Realiza if
             else if (wasSuccessful)
             {
                 SuccessfulDeliveries++;
@@ -186,6 +223,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Gestiona decay anger.
         public void DecayAnger()
         {
             if (AngerLevel <= 0) return;
@@ -202,6 +240,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Gestiona increase anger.
         private void IncreaseAnger(int amount)
         {
             AngerLevel = Math.Min(5, AngerLevel + amount);
@@ -212,6 +251,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Añade favorite ruta
         private void AddFavoriteRoute(string originId, string destinationId)
         {
             string route = $"{originId}→{destinationId}";
@@ -223,6 +263,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene negotiation bonus
         public float GetNegotiationBonus()
         {
             if (RelationshipLevel >= 80) return 0.20f;
@@ -232,6 +273,7 @@ namespace FreightForwarder.Models
             return -0.20f;
         }
 
+// Obtiene desired price multiplier
         public float GetDesiredPriceMultiplier()
         {
             float mult = 1f;
@@ -242,6 +284,7 @@ namespace FreightForwarder.Models
             return mult;
         }
 
+// Gestiona will pay early.
         public bool WillPayEarly()
         {
             float chance = EarlyPaymentChance;
@@ -250,6 +293,7 @@ namespace FreightForwarder.Models
             return UnityEngine.Random.value < chance;
         }
 
+// Gestiona will pay tardío.
         public bool WillPayLate()
         {
             float chance = LatePaymentChance;
@@ -258,9 +302,74 @@ namespace FreightForwarder.Models
             return UnityEngine.Random.value < chance;
         }
 
+// Obtiene success rate
         public float GetSuccessRate()
             => TotalDeliveries == 0 ? 0.5f : (float)SuccessfulDeliveries / TotalDeliveries;
 
+        // ── Lealtad / niveles ─────────────────────────────────────────────────
+        public ClientTier Tier
+        {
+            get
+            {
+                if (SuccessfulDeliveries >= 20) return ClientTier.Diamante;
+                if (SuccessfulDeliveries >= 10) return ClientTier.VIP;
+                if (SuccessfulDeliveries >= 5)  return ClientTier.Frecuente;
+                return ClientTier.Nuevo;
+            }
+        }
+
+// Obtiene nivel nombre
+        public string GetTierName()
+        {
+            switch (Tier)
+            {
+                case ClientTier.Diamante:  return "Diamante";
+                case ClientTier.VIP:       return "VIP";
+                case ClientTier.Frecuente: return "Frecuente";
+                default:                   return "Nuevo";
+            }
+        }
+
+// Obtiene nivel badge
+        public string GetTierBadge()
+        {
+            switch (Tier)
+            {
+                case ClientTier.Diamante:  return "💎 Diamante";
+                case ClientTier.VIP:       return "⭐ VIP";
+                case ClientTier.Frecuente: return "Frecuente";
+                default:                   return "Nuevo";
+            }
+        }
+
+        // Bonus de aceptación de cotización por lealtad acumulada.
+        public float GetTierAcceptanceBonus()
+        {
+            switch (Tier)
+            {
+                case ClientTier.Diamante:  return 0.15f;
+                case ClientTier.VIP:       return 0.10f;
+                case ClientTier.Frecuente: return 0.05f;
+                default:                   return 0f;
+            }
+        }
+
+// Registra profit.
+        public void RecordProfit(int amount) { if (amount > 0) TotalProfit += amount; }
+
+        // La relación se enfría lentamente por inactividad: pierde 'amountPer2Weeks' cada 2 semanas sin interacción.
+        public void DecayRelationshipDaily(int currentDay, float amountPer2Weeks)
+        {
+            // Si hubo interacción más reciente que el último decaimiento, reinicia el contador de 2 semanas.
+            if (LastInteractionDay > LastRelationDecayDay) LastRelationDecayDay = LastInteractionDay;
+            if (currentDay - LastRelationDecayDay < 14) return;   // todavía no pasaron 2 semanas
+            LastRelationDecayDay += 14;
+            // La inactividad enfría la relación solo hasta 50; por debajo solo baja por hechos (fallas, etc.).
+            if (RelationshipLevel > 50f)
+                RelationshipLevel = Mathf.Max(50f, RelationshipLevel - amountPer2Weeks);
+        }
+
+// Obtiene relationship emoji
         public string GetRelationshipEmoji()
         {
             if (RelationshipLevel >= 90) return "💎 Excelente";
@@ -271,6 +380,7 @@ namespace FreightForwarder.Models
             return "👎 Pésima";
         }
 
+// Obtiene anger emoji
         public string GetAngerEmoji()
         {
             switch (AngerLevel)
@@ -284,6 +394,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Gestiona to string.
         public override string ToString()
         {
             string extras = (IsVip ? " VIP" : "") + (HasActiveContract ? " CONTRATO" : "") + (IsBlacklisted ? " BLOQUEADO" : "");

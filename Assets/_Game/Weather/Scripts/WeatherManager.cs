@@ -5,13 +5,13 @@ using UnityEngine;
 
 namespace FreightForwarder.Weather
 {
-    /// <summary>
-    /// Public API for querying weather state. Other systems use this, not WeatherSystem directly.
-    /// </summary>
+
+    // Public API for querying weather state. Other systems use this, not WeatherSystem directly.
+
     public class WeatherManager : Singleton<WeatherManager>
     {
 
-        // Returns the cell at a geographic coordinate (safe: returns empty cell if system not ready)
+        // Gestiona get celda at.
         public WeatherCell GetCellAt(float lat, float lon)
         {
             var grid = WeatherSystem.Instance?.Grid;
@@ -19,7 +19,7 @@ namespace FreightForwarder.Weather
             return grid.GetCellAtLatLon(lat, lon);
         }
 
-        // Sample multiple points along a great-circle route and return total weather delay in days
+        // Sample multiple points along a great-circle ruta and return total clima delay in días
         public float GetRouteWeatherDelay(float originLat, float originLon,
                                           float destLat,   float destLon,
                                           Constants.TransportMode mode,
@@ -58,6 +58,7 @@ namespace FreightForwarder.Weather
             return totalDelay * modeMultiplier;
         }
 
+// Latitud longitud to dir.
         private static Vector3 LatLonToDir(float lat, float lon)
         {
             float latR = lat * Mathf.Deg2Rad;
@@ -67,6 +68,7 @@ namespace FreightForwarder.Weather
                                Mathf.Cos(latR) * Mathf.Sin(lonR));
         }
 
+// Gestiona dir to latitud longitud.
         private static void DirToLatLon(Vector3 dir, out float lat, out float lon)
         {
             lat = Mathf.Asin(dir.y)                  * Mathf.Rad2Deg;

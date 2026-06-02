@@ -7,15 +7,25 @@ namespace FreightForwarder.Managers
 {
     public class EconomyManager : Singleton<EconomyManager>
     {
+// Dinero.
         public int Money { get; private set; }
+// Reputación.
         public int Reputation { get; private set; }
+// Nivel.
         public int Level { get; private set; } = 1;
+// Actual xp.
         public int CurrentXP { get; private set; }
+// Gestiona total cargos completado.
         public int TotalCargosCompleted { get; private set; }
+// Gestiona total cargos fallado.
         public int TotalCargosFailed { get; private set; }
+// Gestiona total revenue.
         public int TotalRevenue { get; private set; }
+// Gestiona total costs.
         public int TotalCosts { get; private set; }
+// Gestiona total cargos abandoned.
         public int TotalCargosAbandoned { get; private set; }
+// Gestiona monthly office costs.
         public int MonthlyOfficeCosts { get; private set; }
 
         public event Action<int> OnMoneyChanged;
@@ -23,6 +33,7 @@ namespace FreightForwarder.Managers
         public event Action<int> OnLevelUp;
         public event Action<int, int> OnXPGained;
 
+// Se ejecuta durante Awake al iniciar el componente.
         protected override void OnAwake()
         {
             Money = Constants.INITIAL_MONEY;
@@ -31,7 +42,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // DINERO
-        // ═══════════════════════════════════
+        // Añade dinero
 
         public void AddMoney(int amount, string reason = "")
         {
@@ -43,6 +54,7 @@ namespace FreightForwarder.Managers
             CheckGameOver();
         }
 
+// Gestiona subtract dinero.
         public bool SubtractMoney(int amount, string reason = "")
         {
             bool hadFunds = Money >= amount;
@@ -57,7 +69,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // REPUTACIÓN
-        // ═══════════════════════════════════
+        // Añade reputación
 
         public void AddReputation(int amount)
         {
@@ -68,7 +80,7 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // XP Y NIVELES
-        // ═══════════════════════════════════
+        // Añade xp
 
         public void AddXP(int amount)
         {
@@ -89,12 +101,14 @@ namespace FreightForwarder.Managers
             }
         }
 
+// Obtiene xp for next level
         public int GetXPForNextLevel() => Level * Constants.XP_PER_LEVEL;
+// Obtiene xp progress
         public float GetXPProgress() => (float)CurrentXP / GetXPForNextLevel();
 
         // ═══════════════════════════════════
         // ESTADÍSTICAS DE CARGAS
-        // ═══════════════════════════════════
+        // Registra cargamento completado.
 
         public void RecordCargoCompleted(int revenue, int cost)
         {
@@ -104,6 +118,27 @@ namespace FreightForwarder.Managers
             AddXP(Constants.XP_PER_CARGO);
         }
 
+
+        // Registra la entrega (estadística + XP) SIN acreditar dinero: la ganancia neta se
+        // cobra de forma diferida según los términos del cliente, vía
+        // <see cref="PaymentManager"/> (cuentas por cobrar).
+
+        public void RecordCargoCompletedDeferred()
+        {
+            TotalCargosCompleted++;
+            AddXP(Constants.XP_PER_CARGO);
+        }
+
+
+        // Paga al contado el costo del transportista (gasto de bolsillo). Puede dejar la caja
+        // en negativo y disparar la bancarrota — es el riesgo del modelo de pago diferido.
+
+        public void PayCarrierCost(int cost)
+        {
+            if (cost > 0) SubtractMoney(cost, "Pago al transportista");
+        }
+
+// Registra cargamento fallado.
         public void RecordCargoFailed(int penalty = 0)
         {
             TotalCargosFailed++;
@@ -111,6 +146,7 @@ namespace FreightForwarder.Managers
             AddReputation(-5);
         }
 
+// Registra cargamento abandoned.
         public void RecordCargoAbandoned(int penalty)
         {
             TotalCargosAbandoned++;
@@ -118,6 +154,7 @@ namespace FreightForwarder.Managers
             AddReputation(-10);
         }
 
+// Gestiona process monthly costs.
         public void ProcessMonthlyCosts(int monthlyCosts)
         {
             MonthlyOfficeCosts = monthlyCosts;
@@ -137,11 +174,12 @@ namespace FreightForwarder.Managers
 
         // ═══════════════════════════════════
         // GAME OVER
-        // ═══════════════════════════════════
+        // Indica si juego terminado.
 
         public bool IsGameOver()
             => Money <= Constants.GAME_OVER_DEBT_THRESHOLD || Reputation <= 0;
 
+// Verifica juego terminado.
         private void CheckGameOver()
         {
             if (IsGameOver())
@@ -163,13 +201,16 @@ namespace FreightForwarder.Managers
             TotalCargosFailed = failed;
             TotalRevenue = revenue;
             TotalCosts = costs;
+            OnMoneyChanged?.Invoke(Money);
+            OnReputationChanged?.Invoke(Reputation);
         }
 
         // ═══════════════════════════════════
         // AUXILIARES
-        // ═══════════════════════════════════
+        // Obtiene net profit
 
         public int GetNetProfit() => TotalRevenue - TotalCosts;
+// Obtiene success rate
         public float GetSuccessRate()
             => (TotalCargosCompleted + TotalCargosFailed) == 0
                ? 0f

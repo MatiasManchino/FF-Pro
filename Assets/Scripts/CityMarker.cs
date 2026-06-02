@@ -3,11 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+// Representa un marcador de ciudad en el mapa global, incluyendo su label, iluminación diurna y selección por cursor.
 public class CityMarker : MonoBehaviour
 {
     // Registro global para lookup O(1) por nombre — evita GameObject.Find()
     private static readonly Dictionary<string, CityMarker> _registry = new Dictionary<string, CityMarker>();
 
+// Busca un marcador de ciudad en el registro global por nombre.
     public static bool TryGetMarker(string name, out CityMarker marker)
         => _registry.TryGetValue(name, out marker);
 
@@ -18,18 +20,24 @@ public class CityMarker : MonoBehaviour
 
     [Header("Daylight Tracking")]
     public string cityName;
+#if UNITY_EDITOR
     public float  expectedDaylightHours;
+#endif
     public float  actualDaylightHours;
     public bool   isInDaylight;
 
     [Header("Label")]
     public float labelOffsetZ = -15f;
-   public float labelScale = 0.0003f;  // Reducido de 0.0008f
-    public float labelFontSize = 12;     // Reducido de 24
+   public float labelScale = 0.0002f;  // Reducido de 0.0002f
+    public float labelFontSize = 12;     // Reducido de 12
+
+    private static Texture2D  _sharedGradientTex;
 
     private Renderer          rend;
     private Material          _rendMaterial;
+#if UNITY_EDITOR
     private DaylightVerifier  verifier;
+#endif
     private GameObject        _labelContainer;
     private TextMesh          _labelText;
     private MeshRenderer      _bgRenderer;
@@ -46,6 +54,7 @@ public class CityMarker : MonoBehaviour
 
     private const float HORIZON_THRESHOLD = -0.01454f;
 
+// Inicializa el marcador: obtiene referencias, posiciona el objeto y crea el label de ciudad.
     void Start()
     {
         if (WorldMap.Instance == null) { Debug.LogError("[CityMarker] WorldMap.Instance no disponible."); enabled = false; return; }
@@ -56,11 +65,14 @@ public class CityMarker : MonoBehaviour
         CreateLabel();
         transform.SetParent(_earthTransform, worldPositionStays: true);
         _cameraTransform = Camera.main?.transform;
+#if UNITY_EDITOR
         verifier = FindAnyObjectByType<DaylightVerifier>();
         if (verifier != null) verifier.RegisterCity(this);
+#endif
         if (!string.IsNullOrEmpty(cityName)) _registry[cityName] = this;
     }
 
+// Construye el label de texto y el fondo degradado que se muestra sobre el marcador.
     void CreateLabel()
     {
         _labelContainer = new GameObject("Label_" + cityName);
@@ -79,38 +91,38 @@ public class CityMarker : MonoBehaviour
 
         _bgRenderer = bg.GetComponent<MeshRenderer>();
 
-        int texSize = 128;
-        Texture2D gradientTex = new Texture2D(texSize, texSize);
-        Color centerColor = new Color(0f, 0.2f, 0.05f, 0.85f);
-        Color edgeColor = new Color(0f, 0.1f, 0.02f, 0f);
-
-        for (int y = 0; y < texSize; y++)
+        if (_sharedGradientTex == null)
         {
-            for (int x = 0; x < texSize; x++)
+            const int texSize = 128;
+            _sharedGradientTex = new Texture2D(texSize, texSize);
+            Color centerColor = new Color(0f, 0.2f, 0.05f, 0.85f);
+            Color edgeColor   = new Color(0f, 0.1f, 0.02f, 0f);
+            for (int y = 0; y < texSize; y++)
             {
-                float dx = (x - texSize / 2f) / (texSize / 2f);
-                float dy = (y - texSize / 2f) / (texSize / 2f);
-                float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                dist = Mathf.Clamp01(dist);
-
-                float alpha = 1f - Mathf.Pow(dist, 3f);
-                Color pixel = Color.Lerp(edgeColor, centerColor, alpha);
-                pixel.a *= alpha;
-                gradientTex.SetPixel(x, y, pixel);
+                for (int x = 0; x < texSize; x++)
+                {
+                    float dx    = (x - texSize / 2f) / (texSize / 2f);
+                    float dy    = (y - texSize / 2f) / (texSize / 2f);
+                    float dist  = Mathf.Clamp01(Mathf.Sqrt(dx * dx + dy * dy));
+                    float alpha = 1f - Mathf.Pow(dist, 3f);
+                    Color pixel = Color.Lerp(edgeColor, centerColor, alpha);
+                    pixel.a *= alpha;
+                    _sharedGradientTex.SetPixel(x, y, pixel);
+                }
             }
+            _sharedGradientTex.Apply();
+            _sharedGradientTex.wrapMode   = TextureWrapMode.Clamp;
+            _sharedGradientTex.filterMode = FilterMode.Bilinear;
         }
-        gradientTex.Apply();
-        gradientTex.wrapMode = TextureWrapMode.Clamp;
-        gradientTex.filterMode = FilterMode.Bilinear;
 
         _bgMaterial = new Material(Shader.Find("Unlit/Transparent"));
-        _bgMaterial.mainTexture = gradientTex;
+        _bgMaterial.mainTexture = _sharedGradientTex;
         _bgMaterial.color = Color.white;
         _bgMaterial.renderQueue = 2999;
         _bgRenderer.sharedMaterial = _bgMaterial;
 
-        float bgWidth = cityName.Length * 0.3f + 1.5f;  // Reducido de 0.6f y 3f
-        float bgHeight = 1.5f;                          // Reducido de 3f
+        float bgWidth = cityName.Length * 0.3f + 1.5f;  // Reducido de 0.3f y 1.5f
+        float bgHeight = 1.5f;                          // Reducido de 1.5f
         bg.transform.localScale = new Vector3(bgWidth, bgHeight, 1f);
 
         // ── Texto ─────────────────────────────────────────────────────────
@@ -134,6 +146,7 @@ public class CityMarker : MonoBehaviour
         _labelContainer.SetActive(false);
     }
 
+// Actualiza la orientación y visibilidad del label cada frame para que siempre mire a la cámara.
     void LateUpdate()
     {
         if (_labelContainer == null || _cameraTransform == null || !_labelContainer.activeSelf) return;
@@ -167,6 +180,7 @@ public class CityMarker : MonoBehaviour
         }
     }
 
+// Posiciona el marcador en la superficie esférica según latitud y longitud.
     public void PlaceOnSurface()
     {
         if (WorldMap.Instance == null) return;
@@ -180,8 +194,10 @@ public class CityMarker : MonoBehaviour
         transform.rotation = Quaternion.LookRotation(n, north);
     }
 
+// Ejecuta la comprobación de luz diurna en cada frame.
     void Update() { CheckDaylight(); }
 
+// Calcula si el marcador está iluminado y acumula las horas de luz del día.
     void CheckDaylight()
     {
         if (SunController.Instance == null || WorldMap.Instance == null || TimeManager.Instance == null) return;
@@ -190,39 +206,47 @@ public class CityMarker : MonoBehaviour
         isInDaylight = Vector3.Dot(cn, sd) > HORIZON_THRESHOLD;
         DateTime utcNow = TimeManager.Instance.CurrentUtcTime;
         int doy = utcNow.DayOfYear;
-        if (!trackingInitialized) { lastSampledUtc = utcNow; lastSampledDayOfYear = doy; trackingInitialized = true; UpdateExpectedDaylight(); UpdateDaylightColor(); return; }
-        if (doy != lastSampledDayOfYear) { if (firstDayCompleted) actualDaylightHours = (float)(accumulatedDaylightSeconds / 3600.0); accumulatedDaylightSeconds = 0.0; lastSampledDayOfYear = doy; firstDayCompleted = true; UpdateExpectedDaylight(); }
+        if (!trackingInitialized) { lastSampledUtc = utcNow; lastSampledDayOfYear = doy; trackingInitialized = true; UpdateDaylightColor(); return; }
+        if (doy != lastSampledDayOfYear) { if (firstDayCompleted) actualDaylightHours = (float)(accumulatedDaylightSeconds / 3600.0); accumulatedDaylightSeconds = 0.0; lastSampledDayOfYear = doy; firstDayCompleted = true; }
         double delta = (utcNow - lastSampledUtc).TotalSeconds;
         if (delta > 0.0 && isInDaylight) accumulatedDaylightSeconds += delta;
         lastSampledUtc = utcNow;
         UpdateDaylightColor();
     }
 
+#if UNITY_EDITOR
+// Recalcula las horas de luz esperadas en el editor para esta ciudad.
     void UpdateExpectedDaylight()
     {
-        if (verifier != null && !string.IsNullOrEmpty(cityName))
+        if (!string.IsNullOrEmpty(cityName))
         { int m = TimeManager.Instance.CurrentUtcTime.Month; expectedDaylightHours = DaylightVerifier.ComputeAstronomicalDaylight(latitude, m, 15); }
     }
+#endif
 
+// Ajusta el brillo del material del marcador según si está en día o en noche.
     void UpdateDaylightColor()
     {
         if (_rendMaterial != null) _rendMaterial.SetFloat("_Brightness", isInDaylight ? 1.2f : 0.5f);
     }
 
+// Indica si ya se completó al menos un día de seguimiento de luz para este marcador.
     public bool HasCompletedFirstDay() => firstDayCompleted;
 
+// Muestra el label y cambia el estado visual cuando el ratón entra en el área del marcador.
     void OnMouseEnter()
     {
         if (_rendMaterial != null) _rendMaterial.SetFloat("_Selected", 1f);
         if (_labelContainer != null) { if (_fadeRoutine != null) StopCoroutine(_fadeRoutine); _fadeRoutine = StartCoroutine(FadeIn()); }
     }
 
+// Oculta el label y restaura el estado visual cuando el ratón sale del marcador.
     void OnMouseExit()
     {
         if (_rendMaterial != null) _rendMaterial.SetFloat("_Selected", 0f);
         if (_labelContainer != null) { if (_fadeRoutine != null) StopCoroutine(_fadeRoutine); _fadeRoutine = StartCoroutine(FadeOut()); }
     }
 
+// Anima la aparición gradual del label desde transparente a visible.
     IEnumerator FadeIn()
     {
         _labelContainer.SetActive(true);
@@ -241,6 +265,7 @@ public class CityMarker : MonoBehaviour
         }
     }
 
+// Anima la desaparición gradual del label hasta ocultarlo.
     IEnumerator FadeOut()
     {
         float duration = 0.2f;
@@ -259,21 +284,26 @@ public class CityMarker : MonoBehaviour
         _labelContainer.SetActive(false);
     }
 
+// Ajusta la opacidad del fondo y del texto del label durante la animación.
     void SetLabelAlpha(float a)
     {
         if (_bgMaterial != null) { Color c = _bgMaterial.color; c.a = 0.9f * a; _bgMaterial.color = c; }
         if (_labelText != null) { Color t = _labelText.color; t.a = a; _labelText.color = t; }
     }
 
+// Elimina el marcador del registro y destruye su label cuando el objeto se destruye.
     void OnDestroy()
     {
         if (!string.IsNullOrEmpty(cityName)) _registry.Remove(cityName);
+#if UNITY_EDITOR
         if (verifier != null) verifier.UnregisterCity(this);
+#endif
         if (_labelContainer != null) Destroy(_labelContainer);
     }
 
 #if UNITY_EDITOR
     [ContextMenu("Actualizar posicion (editor)")]
+// Permite reposicionar el marcador desde el editor usando la función de superficie.
     private void EditorPlace() => PlaceOnSurface();
 #endif
 }

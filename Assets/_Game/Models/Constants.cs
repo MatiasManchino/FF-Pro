@@ -127,12 +127,28 @@ namespace FreightForwarder.Models
         public const int INITIAL_MONEY = 5000;
         public const int INITIAL_REPUTATION = 50;
         public const int GAME_OVER_DEBT_THRESHOLD = -2000;
+        // Operaciones iniciales sin adelantar el costo del transportista (período de gracia).
+        // A partir de la siguiente, el costo se paga al contado al entregar (riesgo de caja / bancarrota).
+        public const int PAYMENT_GRACE_OPERATIONS = 5;
+        // Puntos de relación que pierde un cliente cada 2 semanas sin interacción (no baja de 50 por inactividad).
+        public const float CLIENT_RELATIONSHIP_DECAY_PER_2WEEKS = 5f;
 
         // ═══════════════════════════════════════════════════
         // CONSTANTES DE TIEMPO
         // ═══════════════════════════════════════════════════
 
         public const float DAY_DURATION_SECONDS = 30f;
+
+        // ═══════════════════════════════════════════════════
+        // CONSTANTES VISUALES (mapa / rutas)
+        // ═══════════════════════════════════════════════════
+
+        // Ancho de las líneas de ruta en el globo (marítima, aérea y futuras). 50% del original (era 5).
+        public const float ROUTE_LINE_WIDTH = 2.5f;
+
+        // Días "operando" (carga/descarga) que el vehículo pasa DETENIDO en cada terminal.
+        public const int PORT_OPERATION_DAYS     = 2;   // marítimo (ya incluidos en el TotalTTDays del envío)
+        public const int TERMINAL_OPERATION_DAYS = 1;   // aéreo/terrestre (se suman al tránsito)
 
         // ═══════════════════════════════════════════════════
         // CONSTANTES DE MERCADO
@@ -198,7 +214,7 @@ namespace FreightForwarder.Models
 
         // ═══════════════════════════════════════════════════
         // MÉTODOS DE NOMBRE (para UI)
-        // ═══════════════════════════════════════════════════
+        // Obtiene cargamento type nombre
 
         public static string GetCargoTypeName(CargoType type)
         {
@@ -213,6 +229,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene transport mode nombre
         public static string GetTransportModeName(TransportMode mode)
         {
             switch (mode)
@@ -226,6 +243,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene cliente type nombre
         public static string GetClientTypeName(ClientType type)
         {
             switch (type)
@@ -240,6 +258,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene agent personality nombre
         public static string GetAgentPersonalityName(AgentPersonality personality)
         {
             switch (personality)
@@ -262,6 +281,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene agent estado nombre
         public static string GetAgentStateName(AgentState state)
         {
             switch (state)
@@ -277,6 +297,7 @@ namespace FreightForwarder.Models
             }
         }
 
+// Obtiene agent relationship nombre
         public static string GetAgentRelationshipName(AgentRelationship rel)
         {
             switch (rel)
