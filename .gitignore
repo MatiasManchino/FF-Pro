@@ -38,3 +38,9 @@ Thumbs.db
 # Claude Code
 .claude/
 Assets.zip
+
+# Python (venv y scripts temporales de mantenimiento)
+.venv/
+__pycache__/
+temp_*.py
+rewrite_cs_comments.py
