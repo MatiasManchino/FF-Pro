@@ -1,6 +1,23 @@
 using System;
 using UnityEngine;
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  TimeManager — MOTOR DEL RELOJ (capa "cáscara" / globo)
+// ═══════════════════════════════════════════════════════════════════════════
+//  Esta clase ES el reloj del juego. Corre la simulación de tiempo real:
+//  fecha/hora UTC, velocidades (Pausa/1x/10x/100x/1000x), progreso del día
+//  (día/noche), estaciones, y dispara los eventos OnNewDay / OnNewMonth /
+//  OnNewYear / OnMinuteChanged.
+//
+//  Lo usa TODO el globo: SunController (posición del sol), WorldMap, CityMarker,
+//  DaylightVerifier, CloudLayer(s), MapCameraController.
+//
+//  ⚠️ NO confundir con FFTimeManager. Son COMPLEMENTARIOS, no duplicados:
+//     • TimeManager  = el MOTOR del reloj (esta clase).
+//     • FFTimeManager = un CONTADOR de "días de partida" que se monta ENCIMA:
+//       escucha OnNewDay de acá y lleva la cuenta para la lógica del juego.
+//     No fusionar: si esto se borra, se rompen el globo Y FFTimeManager.
+// ═══════════════════════════════════════════════════════════════════════════
 public class TimeManager : MonoBehaviour
 {
 // Gestiona instance.

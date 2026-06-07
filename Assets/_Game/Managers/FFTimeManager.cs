@@ -5,9 +5,17 @@ using UnityEngine;
 namespace FreightForwarder.Managers
 {
 
-    // Puente entre el TimeManager del mapa (UTC real) y el sistema de días del juego.
-    // No corre su propio timer: escucha TimeManager.OnNewDay y lleva el conteo de días de partida.
-
+    // ═══════════════════════════════════════════════════════════════════════
+    //  FFTimeManager — CONTADOR DE DÍAS DE PARTIDA (capa "núcleo" / juego)
+    // ═══════════════════════════════════════════════════════════════════════
+    //  NO es un reloj y NO corre su propio timer. Es un adaptador finito que se
+    //  monta ENCIMA del TimeManager (el motor del reloj, en Assets/_Game/World):
+    //  escucha su OnNewDay/OnNewMonth y lleva el conteo de "días de partida"
+    //  (CurrentDay, ContinuousDays) que usa la lógica del juego (economía, etc.).
+    //
+    //  ⚠️ Depende de TimeManager. No fusionar ni borrar TimeManager: esta clase
+    //     quedaría sin fuente de tiempo. Son dos capas, a propósito.
+    // ═══════════════════════════════════════════════════════════════════════
     public class FFTimeManager : Singleton<FFTimeManager>
     {
 // Actual día.
